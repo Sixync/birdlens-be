@@ -15,11 +15,11 @@ type DB struct {
 	*sqlx.DB
 }
 
-func New(dsn string) (*DB, error) {
+func New(dbConn string) (*DB, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
-	db, err := sqlx.ConnectContext(ctx, "postgres", "postgres://"+dsn)
+	db, err := sqlx.ConnectContext(ctx, "postgres", dbConn)
 	if err != nil {
 		return nil, err
 	}

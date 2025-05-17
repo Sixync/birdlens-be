@@ -28,14 +28,14 @@ func main() {
 }
 
 type config struct {
-	baseURL   string
 	httpPort  int
+	baseURL   string
 	basicAuth struct {
 		username       string
 		hashedPassword string
 	}
 	db struct {
-		dsn string
+		dbConn string
 	}
 	smtp struct {
 		host     string
@@ -57,11 +57,13 @@ type application struct {
 func run(logger *slog.Logger) error {
 	var cfg config
 
-	cfg.baseURL = env.GetString("BASE_URL", "http://localhost:8090")
 	cfg.httpPort = env.GetInt("HTTP_PORT", 8090)
+
+	// boilerplate
+	cfg.baseURL = env.GetString("BASE_URL", "http://localhost:8090")
 	cfg.basicAuth.username = env.GetString("BASIC_AUTH_USERNAME", "admin")
 	cfg.basicAuth.hashedPassword = env.GetString("BASIC_AUTH_HASHED_PASSWORD", "$2a$10$jRb2qniNcoCyQM23T59RfeEQUbgdAXfR6S0scynmKfJa5Gj3arGJa")
-	cfg.db.dsn = env.GetString("DB_DSN", "user:pass@localhost:5432/db")
+	cfg.db.dbConn = env.GetString("DB_ADDR", "postgres://admin:password@birdlens-db:5432/birdlens?sslmode=disable")
 	cfg.smtp.host = env.GetString("SMTP_HOST", "example.smtp.host")
 	cfg.smtp.port = env.GetInt("SMTP_PORT", 25)
 	cfg.smtp.username = env.GetString("SMTP_USERNAME", "example_username")
@@ -77,7 +79,7 @@ func run(logger *slog.Logger) error {
 		return nil
 	}
 
-	db, err := database.New(cfg.db.dsn)
+	db, err := database.New(cfg.db.dbConn)
 	if err != nil {
 		return err
 	}
