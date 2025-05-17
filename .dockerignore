@@ -1,0 +1,10 @@
+*.sql
+*.log
+.git
+.dockerignore
+.gitignore
+Makefile
+LICENSE
+README.md
+README.html
+nginx/
