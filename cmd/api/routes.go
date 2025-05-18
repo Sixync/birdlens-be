@@ -1,7 +1,9 @@
 package main
 
 import (
+	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -15,13 +17,24 @@ func (app *application) routes() http.Handler {
 	mux.Use(app.logAccess)
 	mux.Use(app.recoverPanic)
 
-	mux.Get("/status", app.status)
-
 	mux.Group(func(mux chi.Router) {
 		mux.Use(app.requireBasicAuthentication)
+	})
 
-		mux.Get("/basic-auth-protected", app.protected)
+	mux.Route("/posts", func(r chi.Router) {
+		r.With(app.paginate).Get("/", app.getPostsHandler)
 	})
 
 	return mux
+}
+
+func (app *application) GetQueryInt(r *http.Request, key string) (int, error) {
+	value := r.URL.Query().Get(key)
+	log.Println("value is", value)
+	result, err := strconv.Atoi(value)
+	if err != nil {
+		return -1, err
+	}
+
+	return result, nil
 }

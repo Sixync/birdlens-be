@@ -11,11 +11,7 @@ import (
 
 const defaultTimeout = 3 * time.Second
 
-type DB struct {
-	*sqlx.DB
-}
-
-func New(dbConn string) (*DB, error) {
+func New(dbConn string) (*sqlx.DB, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
@@ -29,5 +25,5 @@ func New(dbConn string) (*DB, error) {
 	db.SetConnMaxIdleTime(5 * time.Minute)
 	db.SetConnMaxLifetime(2 * time.Hour)
 
-	return &DB{db}, nil
+	return db, nil
 }

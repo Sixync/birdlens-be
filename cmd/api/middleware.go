@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,6 +11,13 @@ import (
 
 	"github.com/tomasen/realip"
 	"golang.org/x/crypto/bcrypt"
+)
+
+type key string
+
+var (
+	LimitKey  key = "limit"
+	OffsetKey key = "offset"
 )
 
 func (app *application) recoverPanic(next http.Handler) http.Handler {
@@ -69,5 +77,24 @@ func (app *application) requireBasicAuthentication(next http.Handler) http.Handl
 		}
 
 		next.ServeHTTP(w, r)
+	})
+}
+
+func (app *application) paginate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		limit, err := app.GetQueryInt(r, "limit")
+		if err != nil {
+			limit = 10
+		}
+		offset, err := app.GetQueryInt(r, "offset")
+		if err != nil {
+			offset = 0
+		}
+
+		ctx = context.WithValue(ctx, LimitKey, limit)
+		ctx = context.WithValue(ctx, OffsetKey, offset)
+
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

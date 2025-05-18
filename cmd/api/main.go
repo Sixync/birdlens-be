@@ -11,6 +11,7 @@ import (
 	"github.com/sixync/birdlens-be/internal/database"
 	"github.com/sixync/birdlens-be/internal/env"
 	"github.com/sixync/birdlens-be/internal/smtp"
+	"github.com/sixync/birdlens-be/internal/store"
 	"github.com/sixync/birdlens-be/internal/version"
 
 	"github.com/lmittmann/tint"
@@ -48,7 +49,7 @@ type config struct {
 
 type application struct {
 	config config
-	db     *database.DB
+	store  *store.Storage
 	logger *slog.Logger
 	mailer *smtp.Mailer
 	wg     sync.WaitGroup
@@ -85,6 +86,8 @@ func run(logger *slog.Logger) error {
 	}
 	defer db.Close()
 
+	store := store.NewStore(db)
+
 	mailer, err := smtp.NewMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.from)
 	if err != nil {
 		return err
@@ -92,7 +95,7 @@ func run(logger *slog.Logger) error {
 
 	app := &application{
 		config: cfg,
-		db:     db,
+		store:  store,
 		logger: logger,
 		mailer: mailer,
 	}

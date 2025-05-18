@@ -13,3 +13,5 @@ require (
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
 	golang.org/x/text v0.25.0
 )
+
+require github.com/go-chi/chi v1.5.5 // indirect

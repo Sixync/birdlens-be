@@ -9,16 +9,18 @@ import (
 	"strings"
 )
 
-func DecodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
+var maxBytesReader = 1_048_576
+
+func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	return decodeJSON(w, r, dst, false)
 }
 
-func DecodeJSONStrict(w http.ResponseWriter, r *http.Request, dst interface{}) error {
+func DecodeJSONStrict(w http.ResponseWriter, r *http.Request, dst any) error {
 	return decodeJSON(w, r, dst, true)
 }
 
-func decodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}, disallowUnknownFields bool) error {
-	r.Body = http.MaxBytesReader(w, r.Body, 1_048_576)
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any, disallowUnknownFields bool) error {
+	r.Body = http.MaxBytesReader(w, r.Body, int64(maxBytesReader))
 
 	dec := json.NewDecoder(r.Body)
 
