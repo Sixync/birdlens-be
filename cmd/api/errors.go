@@ -26,7 +26,7 @@ func (app *application) reportServerError(r *http.Request, err error) {
 func (app *application) errorMessage(w http.ResponseWriter, r *http.Request, status int, message string, headers http.Header) {
 	message = strings.ToUpper(message[:1]) + message[1:]
 
-	err := response.JSONWithHeaders(w, status, map[string]string{"Error": message}, headers)
+	err := response.JSONWithHeaders(w, status, nil, true, message, headers)
 	if err != nil {
 		app.reportServerError(r, err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -34,6 +34,7 @@ func (app *application) errorMessage(w http.ResponseWriter, r *http.Request, sta
 }
 
 func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
+	// log error to std out
 	app.reportServerError(r, err)
 
 	message := "The server encountered a problem and could not process your request"
@@ -55,7 +56,9 @@ func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err e
 }
 
 func (app *application) failedValidation(w http.ResponseWriter, r *http.Request, v validator.Validator) {
-	err := response.JSON(w, http.StatusUnprocessableEntity, v)
+	msg := "invalid credentials"
+
+	err := response.JSON(w, http.StatusUnprocessableEntity, v, false, msg)
 	if err != nil {
 		app.serverError(w, r, err)
 	}

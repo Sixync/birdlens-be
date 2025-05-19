@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"strconv"
 
@@ -30,7 +29,6 @@ func (app *application) routes() http.Handler {
 
 func (app *application) GetQueryInt(r *http.Request, key string) (int, error) {
 	value := r.URL.Query().Get(key)
-	log.Println("value is", value)
 	result, err := strconv.Atoi(value)
 	if err != nil {
 		return -1, err

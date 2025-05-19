@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/sixync/birdlens-be/internal/response"
@@ -9,14 +8,14 @@ import (
 
 func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) {
 	limit, offset := getPaginateFromCtx(r)
-	log.Println("hit getposthandler with limit and offset =", limit, offset)
 	ctx := r.Context()
 	posts, err := app.store.Posts.GetAll(ctx, limit, offset)
 	if err != nil {
 		app.badRequest(w, r, err)
 		return
 	}
-	response.JSON(w, http.StatusOK, posts)
+
+	response.JSON(w, http.StatusOK, posts, false, "get successful")
 }
 
 func getPaginateFromCtx(r *http.Request) (limit, offset int) {
