@@ -27,14 +27,22 @@ type Storage struct {
 		Delete(ctx context.Context, postId int64) error
 		GetAll(ctx context.Context, limit, offset int) (*PaginatedList[*Post], error)
 	}
+	Followers interface {
+		Create(ctx context.Context, follower *Follower) error
+		Delete(ctx context.Context, userId, followerId int64) error
+		GetByUserId(ctx context.Context, userId int64) ([]*Follower, error)
+		GetByFollowerId(ctx context.Context, followerId int64) ([]*Follower, error)
+		GetAll(ctx context.Context) ([]*Follower, error)
+	}
 }
 
 // We can create internal/postgres, internal/mongodb, internal/mysql
 // if we have multiple db
 func NewStore(db *sqlx.DB) *Storage {
 	return &Storage{
-		Users: &UserStore{db},
-		Posts: &PostStore{db},
+		Users:     &UserStore{db},
+		Posts:     &PostStore{db},
+		Followers: &FollowerStore{db},
 	}
 }
 

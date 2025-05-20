@@ -24,6 +24,10 @@ func (app *application) routes() http.Handler {
 		r.With(app.paginate).Get("/", app.getPostsHandler)
 	})
 
+	mux.Route("/users", func(r chi.Router) {
+		r.With(app.paginate).Get("/{user_id}/followers", app.getUserFollowersHandler)
+	})
+
 	return mux
 }
 

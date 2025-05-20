@@ -15,6 +15,7 @@ type User struct {
 	LastName       string     `json:"last_name"`
 	Email          string     `json:"email"`
 	HashedPassword string     `json:"-"`
+	AvatarUrl      string     `json:"avatar_url"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      *time.Time `json:"updated_at"`
 }
@@ -31,10 +32,10 @@ func (s *UserStore) Create(ctx context.Context, user *User) error {
 	query := `
 		INSERT INTO users (
 			username, age, first_name, last_name, 
-			email, hashed_password, created_at, updated_at
+			email, hashed_password, avatar_url, created_at, updated_at
 		) VALUES (
 			:username, :age, :first_name, :last_name, 
-			:email, :hashed_password, :created_at, :updated_at
+      :email, :hashed_password, :avatar_url, :created_at, :updated_at
 		) RETURNING id`
 
 	result, err := s.db.NamedExecContext(ctx, query, user)
