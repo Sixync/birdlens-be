@@ -2,6 +2,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -15,7 +18,7 @@ type User struct {
 	LastName       string     `json:"last_name"`
 	Email          string     `json:"email"`
 	HashedPassword string     `json:"-"`
-	AvatarUrl      string     `json:"avatar_url"`
+	AvatarUrl      *string    `json:"avatar_url"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      *time.Time `json:"updated_at"`
 }
@@ -102,10 +105,28 @@ func (s *UserStore) GetByUsername(ctx context.Context, username string) (*User, 
 	defer cancel()
 
 	var user User
-	query := `SELECT * FROM users WHERE username = ?`
-	err := s.db.GetContext(ctx, &user, query, username)
+	query := `SELECT id, username, age, first_name, last_name, email, hashed_password, created_at, updated_at, avatar_url
+  FROM users WHERE username = $1`
+
+	err := s.db.QueryRowContext(ctx, query, username).Scan(
+		&user.Id,
+		&user.Username,
+		&user.Age,
+		&user.FirstName,
+		&user.LastName,
+		&user.Email,
+		&user.HashedPassword,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&user.AvatarUrl,
+	)
 	if err != nil {
-		return nil, err
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, fmt.Errorf("user not found: %w", err)
+		default:
+			return nil, err
+		}
 	}
 	return &user, nil
 }

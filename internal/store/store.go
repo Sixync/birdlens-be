@@ -34,6 +34,13 @@ type Storage struct {
 		GetByFollowerId(ctx context.Context, followerId int64) ([]*Follower, error)
 		GetAll(ctx context.Context) ([]*Follower, error)
 	}
+	Sessions interface {
+		Create(ctx context.Context, session *Session) error
+		GetById(ctx context.Context, sessionId int64) (*Session, error)
+		GetByUserEmail(ctx context.Context, userEmail string) (*Session, error)
+		RevokeSession(ctx context.Context, sessionId int64) error
+		DeleteSession(ctx context.Context, sessionId int64) error
+	}
 }
 
 // We can create internal/postgres, internal/mongodb, internal/mysql
@@ -43,6 +50,7 @@ func NewStore(db *sqlx.DB) *Storage {
 		Users:     &UserStore{db},
 		Posts:     &PostStore{db},
 		Followers: &FollowerStore{db},
+		Sessions:  &SessionStore{db},
 	}
 }
 

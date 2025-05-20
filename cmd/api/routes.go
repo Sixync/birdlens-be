@@ -25,7 +25,13 @@ func (app *application) routes() http.Handler {
 	})
 
 	mux.Route("/users", func(r chi.Router) {
-		r.With(app.paginate).Get("/{user_id}/followers", app.getUserFollowersHandler)
+		r.With(app.paginate).With(app.getUserMiddleware).Get("/{user_id}/followers", app.getUserFollowersHandler)
+		r.Post("/", app.createUserHandler)
+	})
+
+	mux.Route("/auth", func(r chi.Router) {
+		r.Post("/login", app.loginHandler)
+		// r.Post("/register", app.registerHandler)
 	})
 
 	return mux

@@ -10,6 +10,7 @@ import (
 
 	"github.com/sixync/birdlens-be/internal/database"
 	"github.com/sixync/birdlens-be/internal/env"
+	"github.com/sixync/birdlens-be/internal/jwt"
 	"github.com/sixync/birdlens-be/internal/smtp"
 	"github.com/sixync/birdlens-be/internal/store"
 	"github.com/sixync/birdlens-be/internal/version"
@@ -45,14 +46,20 @@ type config struct {
 		password string
 		from     string
 	}
+	jwt struct {
+		secretKey                  string
+		accessTokenExpDurationMin  int
+		refreshTokenExpDurationDay int
+	}
 }
 
 type application struct {
-	config config
-	store  *store.Storage
-	logger *slog.Logger
-	mailer *smtp.Mailer
-	wg     sync.WaitGroup
+	config     config
+	store      *store.Storage
+	logger     *slog.Logger
+	mailer     *smtp.Mailer
+	wg         sync.WaitGroup
+	tokenMaker *jwt.JWTMaker
 }
 
 func run(logger *slog.Logger) error {
@@ -70,6 +77,9 @@ func run(logger *slog.Logger) error {
 	cfg.smtp.username = env.GetString("SMTP_USERNAME", "example_username")
 	cfg.smtp.password = env.GetString("SMTP_PASSWORD", "pa55word")
 	cfg.smtp.from = env.GetString("SMTP_FROM", "Example Name <no_reply@example.org>")
+	cfg.jwt.secretKey = env.GetString("JWT_SECRET_KEY", "THISISASECRETKEYHALLELUJAHBABY12")
+	cfg.jwt.accessTokenExpDurationMin = env.GetInt("ACCESS_TOKEN_EXP_MIN", 15)
+	cfg.jwt.refreshTokenExpDurationDay = env.GetInt("REFRESH_TOKEN_EXP_DAY", 1)
 
 	showVersion := flag.Bool("version", false, "display version and exit")
 
@@ -93,11 +103,14 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
+	tokenMaker := jwt.NewJWTMaker(cfg.jwt.secretKey)
+
 	app := &application{
-		config: cfg,
-		store:  store,
-		logger: logger,
-		mailer: mailer,
+		config:     cfg,
+		store:      store,
+		logger:     logger,
+		mailer:     mailer,
+		tokenMaker: tokenMaker,
 	}
 
 	return app.serveHTTP()

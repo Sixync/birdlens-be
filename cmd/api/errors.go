@@ -71,3 +71,8 @@ func (app *application) basicAuthenticationRequired(w http.ResponseWriter, r *ht
 	message := "You must be authenticated to access this resource"
 	app.errorMessage(w, r, http.StatusUnauthorized, message, headers)
 }
+
+func (app *application) unauthorized(w http.ResponseWriter, r *http.Request) {
+	message := "You must be authenticated to access this resource"
+	app.errorMessage(w, r, http.StatusUnauthorized, message, nil)
+}
