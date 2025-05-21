@@ -1,0 +1,3 @@
+ALTER TABLE comments
+ADD COLUMN user_id BIGINT NOT NULL DEFAULT 0,
+ADD CONSTRAINT fk_comments_user_id FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;

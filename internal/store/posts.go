@@ -148,14 +148,20 @@ func (s *PostStore) GetById(ctx context.Context, id int64) (*Post, error) {
 	}
 
 	var post Post
-	query := `SELECT * FROM posts WHERE id = ?`
-	err := s.db.GetContext(ctx, &post, query, id)
-	if err == sql.ErrNoRows {
-		return nil, errors.New("no post found with the given ID")
-	}
+	query := `
+    SELECT id, location_name, latitude, longitude, privacy_level, type, is_featured, created_at, updated_at
+    FROM posts WHERE id = $1;
+  `
+	err := s.db.QueryRowContext(ctx, query, id).Scan(&post.Id, &post.LocationName, &post.Latitude, &post.Longitude, &post.PrivacyLevel, &post.Type, &post.IsFeatured, &post.CreatedAt, &post.UpdatedAt)
 	if err != nil {
-		return nil, err
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, sql.ErrNoRows
+		default:
+			return nil, err
+		}
 	}
+
 	return &post, nil
 }
 

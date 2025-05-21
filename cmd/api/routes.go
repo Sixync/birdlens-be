@@ -18,6 +18,7 @@ func (app *application) routes() http.Handler {
 
 	mux.Route("/posts", func(r chi.Router) {
 		r.With(app.paginate).Get("/", app.getPostsHandler)
+		r.With(app.paginate).With(app.getPostMiddleware).Get("/{post_id}/comments", app.getPostCommentsHandler)
 	})
 
 	mux.Route("/users", func(r chi.Router) {
