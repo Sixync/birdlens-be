@@ -12,20 +12,21 @@ import (
 	"github.com/sixync/birdlens-be/internal/response"
 	"github.com/sixync/birdlens-be/internal/store"
 	"github.com/sixync/birdlens-be/internal/utils"
+	"github.com/sixync/birdlens-be/internal/validator"
 )
 
 type LoginUserReq struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username string `json:"username" validate:"required,min=3,max=20"`
+	Password string `json:"password" validate:"required,min=3"`
 }
 
 type RegisterUserReq struct {
-	Username  string  `json:"username"`
-	Password  string  `json:"password"`
-	Email     string  `json:"email"`
-	FirstName string  `json:"first_name"`
-	LastName  string  `json:"last_name"`
-	Age       int     `json:"age"`
+	Username  string  `json:"username" validate:"required,min=3,max=20"`
+	Password  string  `json:"password" validate:"required,min=3"`
+	Email     string  `json:"email" validate:"required,email"`
+	FirstName string  `json:"first_name" validate:"required,min=3,max=20"`
+	LastName  string  `json:"last_name" validate:"required,min=3,max=20"`
+	Age       int     `json:"age" validate:"required,min=1,max=120"`
 	AvatarUrl *string `json:"avatar_url"`
 }
 
@@ -40,6 +41,11 @@ type LoginUserRes struct {
 func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	var req LoginUserReq
 	if err := request.DecodeJSON(w, r, &req); err != nil {
+		app.badRequest(w, r, err)
+		return
+	}
+
+	if err := validator.Validate(req); err != nil {
 		app.badRequest(w, r, err)
 		return
 	}
@@ -106,6 +112,12 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) {
 	var req RegisterUserReq
 	if err := request.DecodeJSON(w, r, &req); err != nil {
+		app.badRequest(w, r, err)
+		return
+	}
+
+	// Validate the request
+	if err := validator.Validate(req); err != nil {
 		app.badRequest(w, r, err)
 		return
 	}

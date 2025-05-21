@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/sixync/birdlens-be/internal/response"
-	"github.com/sixync/birdlens-be/internal/validator"
 )
 
 func (app *application) reportServerError(r *http.Request, err error) {
@@ -58,15 +57,6 @@ func (app *application) methodNotAllowed(w http.ResponseWriter, r *http.Request)
 
 func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err error) {
 	app.errorMessage(w, r, http.StatusBadRequest, err.Error(), nil)
-}
-
-func (app *application) failedValidation(w http.ResponseWriter, r *http.Request, v validator.Validator) {
-	msg := "invalid credentials"
-
-	err := response.JSON(w, http.StatusUnprocessableEntity, v, false, msg)
-	if err != nil {
-		app.serverError(w, r, err)
-	}
 }
 
 func (app *application) basicAuthenticationRequired(w http.ResponseWriter, r *http.Request) {
