@@ -19,6 +19,16 @@ type LoginUserReq struct {
 	Password string `json:"password"`
 }
 
+type RegisterUserReq struct {
+	Username  string  `json:"username"`
+	Password  string  `json:"password"`
+	Email     string  `json:"email"`
+	FirstName string  `json:"first_name"`
+	LastName  string  `json:"last_name"`
+	Age       int     `json:"age"`
+	AvatarUrl *string `json:"avatar_url"`
+}
+
 type LoginUserRes struct {
 	SessionID       int64     `json:"session_id"`
 	AccessToken     string    `json:"access_token"`
@@ -39,7 +49,7 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			app.errorMessage(w, r, http.StatusBadRequest, "invalid credentials", nil)
+			app.invalidCredentials(w, r)
 			return
 		default:
 			app.serverError(w, r, err)
@@ -47,14 +57,10 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Println("pass get user with user", user)
-
 	if matched := utils.CheckPasswordHash(req.Password, user.HashedPassword); !matched {
-		app.unauthorized(w, r)
+		app.invalidCredentials(w, r)
 		return
 	}
-
-	log.Println("pass match pass")
 
 	// generate jwt
 	durationMin := app.config.jwt.accessTokenExpDurationMin
@@ -78,7 +84,11 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	refreshTokenDuration := app.config.jwt.refreshTokenExpDurationDay
 	refreshTokenExp := time.Now().Add(time.Hour * 24 * time.Duration(refreshTokenDuration))
 
-	app.handleUserSession(ctx, user, refreshToken, refreshTokenExp)
+	err = app.handleUserSession(ctx, user, refreshToken, refreshTokenExp)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
 
 	result := &LoginUserRes{
 		SessionID:       user.Id,
@@ -93,9 +103,63 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, result, false, "login successful")
 }
 
+func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) {
+	var req RegisterUserReq
+	if err := request.DecodeJSON(w, r, &req); err != nil {
+		app.badRequest(w, r, err)
+		return
+	}
+
+	ctx := r.Context()
+
+	// Check if user already UsernameExists
+	exists, msg, err := app.validRegisterUserReq(ctx, req)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	if exists {
+		app.errorMessage(w, r, http.StatusBadRequest, msg, nil)
+		return
+	}
+
+	hashedPassword, err := utils.HashPassword(req.Password)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	user := &store.User{
+		Username:       req.Username,
+		FirstName:      req.FirstName,
+		LastName:       req.LastName,
+		Email:          req.Email,
+		Age:            req.Age,
+		AvatarUrl:      req.AvatarUrl,
+		HashedPassword: hashedPassword,
+	}
+	err = app.store.Users.Create(ctx, user)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			app.errorMessage(w, r, http.StatusBadRequest, "invalid credentials", nil)
+			return
+		default:
+			app.serverError(w, r, err)
+			return
+		}
+	}
+
+	response.JSON(w, http.StatusCreated, user, false, "register successfully")
+}
+
 func (app *application) handleUserSession(ctx context.Context, user *store.User, refreshToken string, refreshTokenExp time.Time) error {
+	log.Println("hit handleUserSession with user, refreshToken, refreshTokenExp", user, refreshToken, refreshTokenExp)
 	s, err := app.store.Sessions.GetById(ctx, user.Id)
+
+	// Create if not found and add expire if found
 	if err != nil && errors.Is(err, sql.ErrNoRows) {
+		log.Println("create new session")
 		session := &store.Session{
 			ID:           user.Id,
 			UserEmail:    user.Email,
@@ -107,10 +171,38 @@ func (app *application) handleUserSession(ctx context.Context, user *store.User,
 		if err != nil {
 			return err
 		}
-	} else {
+	} else { // Update if found
+		log.Println("update session with session is", s)
+		log.Println("this is refreshTokenExp", refreshTokenExp)
+		log.Println("this is s.expireat", s.ExpiresAt)
 		s.ExpiresAt = refreshTokenExp
-		// TODO: implement the rest because im too lazy
+		s.RefreshToken = refreshToken
+		log.Println("session after update", s)
+		err := app.store.Sessions.UpdateSession(ctx, s)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+func (app *application) validRegisterUserReq(ctx context.Context, req RegisterUserReq) (exists bool, msg string, err error) {
+	con1, err := app.store.Users.EmailExists(ctx, req.Email)
+	if con1 {
+		msg += "email already exists\n"
+	}
+	if err != nil {
+		return false, msg, err
+	}
+
+	con2, err := app.store.Users.UsernameExists(ctx, req.Username)
+	if con2 {
+		msg += "username already exists\n"
+	}
+	if err != nil {
+		return false, msg, err
+	}
+
+	return con1 || con2, msg, nil
 }

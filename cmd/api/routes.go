@@ -31,7 +31,7 @@ func (app *application) routes() http.Handler {
 
 	mux.Route("/auth", func(r chi.Router) {
 		r.Post("/login", app.loginHandler)
-		// r.Post("/register", app.registerHandler)
+		r.Post("/register", app.registerHandler)
 	})
 
 	return mux

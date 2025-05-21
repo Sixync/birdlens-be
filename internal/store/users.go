@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -35,22 +36,16 @@ func (s *UserStore) Create(ctx context.Context, user *User) error {
 	query := `
 		INSERT INTO users (
 			username, age, first_name, last_name, 
-			email, hashed_password, avatar_url, created_at, updated_at
+			email, hashed_password, avatar_url 
 		) VALUES (
-			:username, :age, :first_name, :last_name, 
-      :email, :hashed_password, :avatar_url, :created_at, :updated_at
-		) RETURNING id`
+      $1, $2, $3, $4, $5, $6, $7 
+		) RETURNING id, created_at`
 
-	result, err := s.db.NamedExecContext(ctx, query, user)
+	err := s.db.QueryRowContext(ctx, query, user.Username, user.Age, user.FirstName, user.LastName, user.Email, user.HashedPassword, user.AvatarUrl).Scan(&user.Id, &user.CreatedAt)
 	if err != nil {
 		return err
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		return err
-	}
-	user.Id = id
 	return nil
 }
 
@@ -143,4 +138,34 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 		return nil, err
 	}
 	return &user, nil
+}
+
+// create check exist user
+func (s *UserStore) UsernameExists(ctx context.Context, username string) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM users WHERE username = $1);`
+	var exists bool
+
+	err := s.db.QueryRowContext(ctx, query, username).Scan(&exists)
+	if err != nil {
+		// sql.ErrNoRows should generally not happen here because EXISTS always returns one row
+		// with a boolean value. If it does, it's an unexpected DB or driver behavior.
+		log.Printf("Error checking if email '%s' exists: %v", username, err)
+		return false, err // Propagate the actual db error
+	}
+	return exists, nil
+}
+
+// create check exist user email
+func (s *UserStore) EmailExists(ctx context.Context, email string) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1);`
+	var exists bool
+
+	err := s.db.QueryRowContext(ctx, query, email).Scan(&exists)
+	if err != nil {
+		// sql.ErrNoRows should generally not happen here because EXISTS always returns one row
+		// with a boolean value. If it does, it's an unexpected DB or driver behavior.
+		log.Printf("Error checking if email '%s' exists: %v", email, err)
+		return false, err // Propagate the actual db error
+	}
+	return exists, nil
 }

@@ -4,20 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
+	"log"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 )
 
 type Session struct {
-	ID           int64     `json:"id"`
-	UserEmail    string    `json:"user_email"`
-	RefreshToken string    `json:"refresh_token"`
-	IsRevoked    bool      `json:"is_revoked"`
-	ExpiresAt    time.Time `json:"expires_at"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           int64      `json:"id"`
+	UserEmail    string     `json:"user_email"`
+	RefreshToken string     `json:"refresh_token"`
+	IsRevoked    bool       `json:"is_revoked"`
+	ExpiresAt    time.Time  `json:"expires_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    *time.Time `json:"updated_at"`
 }
 
 type SessionStore struct {
@@ -42,20 +42,24 @@ func (s *SessionStore) Create(ctx context.Context, session *Session) error {
 
 func (s *SessionStore) GetById(ctx context.Context, sessionId int64) (*Session, error) {
 	// Implement the logic to get a session by ID from the database
+	log.Println("hit get by id with sessionId", sessionId)
 	query := `SELECT id, user_email, refresh_token, is_revoked, expires_at, created_at, updated_at 
         FROM sessions WHERE id = $1`
-	session := &Session{}
+	var session Session
 	err := s.db.QueryRowContext(ctx, query, sessionId).Scan(&session.ID, &session.UserEmail,
 		&session.RefreshToken, &session.IsRevoked, &session.ExpiresAt, &session.CreatedAt, &session.UpdatedAt)
 	if err != nil {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			return nil, fmt.Errorf("session not found: %w", err)
+			log.Println("session with id not found", sessionId)
+			return nil, sql.ErrNoRows
 		default:
+			log.Println("error getting session by id", err)
 			return nil, err
 		}
 	}
-	return session, nil
+	log.Println("sessgion get by id value", session)
+	return &session, nil
 }
 
 func (s *SessionStore) GetByUserEmail(ctx context.Context, userEmail string) (*Session, error) {
@@ -75,6 +79,15 @@ func (s *SessionStore) RevokeSession(ctx context.Context, sessionId int64) error
 	// Implement the logic to revoke a session in the database
 	query := `UPDATE sessions SET is_revoked = true WHERE id = $1`
 	_, err := s.db.ExecContext(ctx, query, sessionId)
+	return err
+}
+
+func (s *SessionStore) UpdateSession(ctx context.Context, session *Session) error {
+	// Implement the logic to update a session in the database
+	log.Println("hit update store with session", session)
+
+	query := `UPDATE sessions SET refresh_token = $1, expires_at = $2, updated_at = $3 WHERE id = $4`
+	_, err := s.db.ExecContext(ctx, query, session.RefreshToken, session.ExpiresAt, time.Now(), session.ID)
 	return err
 }
 

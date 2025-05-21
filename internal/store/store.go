@@ -19,6 +19,8 @@ type Storage struct {
 		Delete(ctx context.Context, userId int64) error
 		GetByEmail(ctx context.Context, email string) (*User, error)
 		GetByUsername(ctx context.Context, username string) (*User, error)
+		UsernameExists(ctx context.Context, username string) (bool, error)
+		EmailExists(ctx context.Context, username string) (bool, error)
 	}
 	Posts interface {
 		Create(context.Context, *Post) error
@@ -40,6 +42,7 @@ type Storage struct {
 		GetByUserEmail(ctx context.Context, userEmail string) (*Session, error)
 		RevokeSession(ctx context.Context, sessionId int64) error
 		DeleteSession(ctx context.Context, sessionId int64) error
+		UpdateSession(ctx context.Context, session *Session) error
 	}
 }
 

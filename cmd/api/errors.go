@@ -33,6 +33,11 @@ func (app *application) errorMessage(w http.ResponseWriter, r *http.Request, sta
 	}
 }
 
+func (app *application) invalidCredentials(w http.ResponseWriter, r *http.Request) {
+	message := "invalid credentials"
+	app.errorMessage(w, r, http.StatusBadRequest, message, nil)
+}
+
 func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
 	// log error to std out
 	app.reportServerError(r, err)
