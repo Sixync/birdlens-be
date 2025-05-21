@@ -86,8 +86,11 @@ func (s *UserStore) GetById(ctx context.Context, id int64) (*User, error) {
 	defer cancel()
 
 	var user User
-	query := `SELECT * FROM users WHERE id = ?`
-	err := s.db.GetContext(ctx, &user, query, id)
+	query := `
+  SELECT username, age, first_name, last_name, email, hashed_password, avatar_url, created_at, updated_at
+  FROM users WHERE id = $1;
+  `
+	err := s.db.QueryRowContext(ctx, query, id).Scan(&user.Username, &user.Age, &user.FirstName, &user.LastName, &user.Email, &user.HashedPassword, &user.AvatarUrl, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}

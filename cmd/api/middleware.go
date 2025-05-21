@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
+	"github.com/sixync/birdlens-be/internal/jwt"
 	"github.com/sixync/birdlens-be/internal/response"
 
 	"github.com/tomasen/realip"
@@ -16,8 +18,9 @@ import (
 type key string
 
 var (
-	LimitKey  key = "limit"
-	OffsetKey key = "offset"
+	LimitKey      key = "limit"
+	OffsetKey     key = "offset"
+	UserClaimsKey key = "user_claims"
 )
 
 func (app *application) recoverPanic(next http.Handler) http.Handler {
@@ -97,4 +100,49 @@ func (app *application) paginate(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (app *application) AuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			app.logger.Warn("Missing Authorization header")
+			app.unauthorized(w, r)
+			return
+		}
+
+		headerParts := strings.Split(authHeader, " ")
+		if len(headerParts) != 2 || strings.ToLower(headerParts[0]) != "bearer" {
+			app.logger.Warn("Malformed Authorization header", "header", authHeader)
+			app.unauthorized(w, r)
+			return
+		}
+
+		tokenStr := headerParts[1]
+		claims, err := app.tokenMaker.VerifyToken(tokenStr)
+		if err != nil {
+			// Your VerifyToken returns generic errors. If it returned specific errors
+			// from github.com/golang-jwt/jwt/v5 (like jwtv5.ErrTokenExpired),
+			// you could provide more specific client feedback.
+			app.logger.Warn("Invalid token", "error", err, "token", tokenStr)
+			app.errorMessage(w, r, http.StatusUnauthorized, "Invalid or expired token", nil)
+			return
+		}
+
+		// Token is valid, store claims in context
+		ctx := context.WithValue(r.Context(), UserClaimsKey, claims)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// Helper to get UserClaims from context (optional but recommended)
+func (app *application) getUserClaimsFromCtx(r *http.Request) *jwt.UserClaims {
+	claims, ok := r.Context().Value(UserClaimsKey).(*jwt.UserClaims)
+	if !ok {
+		// This should not happen if middleware is correctly applied
+		// and always sets the claims. Could panic or log an error.
+		app.logger.Error("User claims not found in context where expected")
+		return nil
+	}
+	return claims
 }

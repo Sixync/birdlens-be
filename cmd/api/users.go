@@ -91,6 +91,20 @@ func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (app *application) getCurrentUserProfileHandler(w http.ResponseWriter, r *http.Request) {
+	claims := app.getUserClaimsFromCtx(r)
+
+	profile, err := app.store.Users.GetById(r.Context(), claims.ID)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	if err := response.JSON(w, http.StatusOK, profile, false, "get successful"); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
 func getUserFromCtx(r *http.Request) (*store.User, error) {
 	ctx := r.Context()
 	user, _ := ctx.Value(UserKey).(*store.User)

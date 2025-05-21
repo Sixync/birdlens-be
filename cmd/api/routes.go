@@ -16,10 +16,6 @@ func (app *application) routes() http.Handler {
 	mux.Use(app.logAccess)
 	mux.Use(app.recoverPanic)
 
-	mux.Group(func(mux chi.Router) {
-		mux.Use(app.requireBasicAuthentication)
-	})
-
 	mux.Route("/posts", func(r chi.Router) {
 		r.With(app.paginate).Get("/", app.getPostsHandler)
 	})
@@ -27,6 +23,7 @@ func (app *application) routes() http.Handler {
 	mux.Route("/users", func(r chi.Router) {
 		r.With(app.paginate).With(app.getUserMiddleware).Get("/{user_id}/followers", app.getUserFollowersHandler)
 		r.Post("/", app.createUserHandler)
+		r.With(app.AuthMiddleware).Get("/me", app.getCurrentUserProfileHandler)
 	})
 
 	mux.Route("/auth", func(r chi.Router) {
