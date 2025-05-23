@@ -25,7 +25,7 @@ services:
       DB_ADDR: postgres://admin:password@birdlens-db:5432/birdlens?sslmode=disable
       HTTP_PORT: 8080
       ENV: "dev"
-      ACCESS_TOKEN_EXP_MIN: 30
+      ACCESS_TOKEN_EXP_MIN: 10
       REFRESH_TOKEN_EXP_DAY : 14
     deploy:
       mode: replicated

@@ -30,6 +30,15 @@ type RegisterUserReq struct {
 	AvatarUrl *string `json:"avatar_url"`
 }
 
+type RefreshTokenReq struct {
+	AccessToken  string `json:"access_token" validate:"required"`
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+type RefreshTokenRes struct {
+	AccessToken string `json:"access_token"`
+}
+
 type LoginUserRes struct {
 	SessionID       int64     `json:"session_id"`
 	AccessToken     string    `json:"access_token"`
@@ -163,6 +172,57 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	response.JSON(w, http.StatusCreated, user, false, "register successfully")
+}
+
+func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Request) {
+	var req RefreshTokenReq
+	if err := request.DecodeJSON(w, r, &req); err != nil {
+		app.badRequest(w, r, err)
+		return
+	}
+
+	if err := validator.Validate(req); err != nil {
+		app.badRequest(w, r, err)
+		return
+	}
+
+	ctx := r.Context()
+	claims, err := app.tokenMaker.GetUserClaimsFromToken(req.AccessToken)
+	if err != nil {
+		log.Println("error getting user claims from token", err)
+		app.unauthorized(w, r)
+		return
+	}
+
+	if claims == nil {
+		log.Println("claims is nil")
+		app.unauthorized(w, r)
+		return
+	}
+
+	session, err := app.store.Sessions.GetById(ctx, claims.ID)
+	if err != nil {
+		app.unauthorized(w, r)
+		return
+	}
+
+	if session.IsRevoked || session.ExpiresAt.Before(time.Now()) {
+		log.Println("session is revoked or expired")
+		app.unauthorized(w, r)
+		return
+	}
+
+	accessToken, _, err := app.tokenMaker.CreateToken(claims.ID, claims.Username, app.config.jwt.accessTokenExpDurationMin)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	res := &RefreshTokenRes{
+		AccessToken: accessToken,
+	}
+
+	response.JSON(w, http.StatusAccepted, res, false, "refresh token successfully")
 }
 
 func (app *application) handleUserSession(ctx context.Context, user *store.User, refreshToken string, refreshTokenExp time.Time) error {

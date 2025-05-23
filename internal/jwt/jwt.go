@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -67,4 +68,29 @@ func (maker *JWTMaker) CreateRefreshToken() (string, error) {
 	token := base64.URLEncoding.EncodeToString(tokenBytes)
 
 	return token, nil
+}
+
+func (maker *JWTMaker) GetUserClaimsFromToken(tokenStr string) (*UserClaims, error) {
+	// Parse the token and extract claims
+	log.Println("hit GetUserClaimsFromToken with tokenStr", tokenStr)
+	token, err := jwt.ParseWithClaims(tokenStr, &UserClaims{}, func(token *jwt.Token) (any, error) {
+		_, ok := token.Method.(*jwt.SigningMethodHMAC)
+		if !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(maker.secretKey), nil
+	})
+	log.Println("token", token)
+	if err != nil && !errors.Is(err, jwt.ErrTokenExpired) {
+		return nil, err
+	}
+
+	if claims := token.Claims.(*UserClaims); claims != nil {
+		log.Println("claims", claims)
+		return claims, nil
+	}
+
+	log.Println("claims is nil")
+
+	return nil, errors.New("invalid token claims")
 }

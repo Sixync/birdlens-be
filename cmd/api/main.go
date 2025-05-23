@@ -77,7 +77,7 @@ func run(logger *slog.Logger) error {
 	cfg.smtp.username = env.GetString("SMTP_USERNAME", "example_username")
 	cfg.smtp.password = env.GetString("SMTP_PASSWORD", "pa55word")
 	cfg.smtp.from = env.GetString("SMTP_FROM", "Example Name <no_reply@example.org>")
-	cfg.jwt.secretKey = env.GetString("JWT_SECRET_KEY", "THISISASECRETKEYHALLELUJAHBABY12")
+	cfg.jwt.secretKey = env.GetString("JWT_SECRET_KEY", "THISISASECRETKEYHALLELUJAHBABY123123123123123123123")
 	cfg.jwt.accessTokenExpDurationMin = env.GetInt("ACCESS_TOKEN_EXP_MIN", 15)
 	cfg.jwt.refreshTokenExpDurationDay = env.GetInt("REFRESH_TOKEN_EXP_DAY", 1)
 

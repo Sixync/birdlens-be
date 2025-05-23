@@ -121,9 +121,6 @@ func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 		tokenStr := headerParts[1]
 		claims, err := app.tokenMaker.VerifyToken(tokenStr)
 		if err != nil {
-			// Your VerifyToken returns generic errors. If it returned specific errors
-			// from github.com/golang-jwt/jwt/v5 (like jwtv5.ErrTokenExpired),
-			// you could provide more specific client feedback.
 			app.logger.Warn("Invalid token", "error", err, "token", tokenStr)
 			app.errorMessage(w, r, http.StatusUnauthorized, "Invalid or expired token", nil)
 			return
