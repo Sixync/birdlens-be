@@ -60,16 +60,3 @@ func (app *application) getPostFromCtx(r *http.Request) *store.Post {
 	}
 	return post
 }
-
-func getPaginateFromCtx(r *http.Request) (limit, offset int) {
-	ctx := r.Context()
-	limit, ok := ctx.Value(LimitKey).(int)
-	if !ok {
-		limit = 10
-	}
-	offset, ok = ctx.Value(OffsetKey).(int)
-	if !ok {
-		offset = 0
-	}
-	return
-}

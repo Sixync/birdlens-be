@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -12,7 +11,6 @@ import (
 	"github.com/sixync/birdlens-be/internal/response"
 
 	"github.com/tomasen/realip"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type key string
@@ -56,33 +54,6 @@ func (app *application) logAccess(next http.Handler) http.Handler {
 	})
 }
 
-func (app *application) requireBasicAuthentication(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		username, plaintextPassword, ok := r.BasicAuth()
-		if !ok {
-			app.basicAuthenticationRequired(w, r)
-			return
-		}
-
-		if app.config.basicAuth.username != username {
-			app.basicAuthenticationRequired(w, r)
-			return
-		}
-
-		err := bcrypt.CompareHashAndPassword([]byte(app.config.basicAuth.hashedPassword), []byte(plaintextPassword))
-		switch {
-		case errors.Is(err, bcrypt.ErrMismatchedHashAndPassword):
-			app.basicAuthenticationRequired(w, r)
-			return
-		case err != nil:
-			app.serverError(w, r, err)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
 func (app *application) paginate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -100,6 +71,19 @@ func (app *application) paginate(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func getPaginateFromCtx(r *http.Request) (limit, offset int) {
+	ctx := r.Context()
+	limit, ok := ctx.Value(LimitKey).(int)
+	if !ok {
+		limit = 10
+	}
+	offset, ok = ctx.Value(OffsetKey).(int)
+	if !ok {
+		offset = 0
+	}
+	return
 }
 
 func (app *application) AuthMiddleware(next http.Handler) http.Handler {

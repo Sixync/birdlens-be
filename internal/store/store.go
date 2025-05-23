@@ -51,6 +51,19 @@ type Storage struct {
 		Delete(ctx context.Context, commentId int64) error
 		GetByPostId(ctx context.Context, postId int64, limit, offset int) (*PaginatedList[*Comment], error)
 	}
+	Tours interface {
+		Create(ctx context.Context, tour *Tour) error
+		GetByID(ctx context.Context, id int64) (*Tour, error)
+		Update(ctx context.Context, tour *Tour) error
+		Delete(ctx context.Context, id int64) error
+		GetAll(ctx context.Context, limit, offset int) (*PaginatedList[*Tour], error)
+	}
+	Events interface {
+		GetByID(ctx context.Context, id int64) (*Event, error)
+	}
+	Location interface {
+		GetByID(ctx context.Context, id int64) (*Location, error)
+	}
 }
 
 // We can create internal/postgres, internal/mongodb, internal/mysql
@@ -62,6 +75,9 @@ func NewStore(db *sqlx.DB) *Storage {
 		Followers: &FollowerStore{db},
 		Sessions:  &SessionStore{db},
 		Comments:  &CommentStore{db},
+		Tours:     &TourStore{db},
+		Events:    &EventStore{db},
+		Location:  &LocationStore{db},
 	}
 }
 

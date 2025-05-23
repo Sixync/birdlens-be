@@ -33,6 +33,11 @@ func (app *application) routes() http.Handler {
 		r.Post("/refresh_token", app.refreshTokenHandler)
 	})
 
+	mux.Route("/tours", func(r chi.Router) {
+		r.With(app.paginate).Get("/", app.getToursHandler)
+		r.With(app.getTourMiddleware).Get("/{tour_id}", app.getTourHandler)
+	})
+
 	return mux
 }
 
