@@ -3,7 +3,7 @@ CREATE TABLE carts (
     FOREIGN KEY (id) REFERENCES users (id) ON DELETE CASCADE
 );
 
-CREATE TABLE equipments(
+CREATE TABLE equipments (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
@@ -27,5 +27,5 @@ CREATE TABLE cart_item_equipments (
     cart_item_id BIGINT NOT NULL,
     equipment_id BIGINT NOT NULL,
     FOREIGN KEY (cart_item_id) REFERENCES cart_items(id) ON DELETE CASCADE,
-    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
+    FOREIGN KEY (equipment_id) REFERENCES equipments(id) ON DELETE CASCADE
 );

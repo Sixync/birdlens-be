@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"runtime/debug"
 	"sync"
 
+	firebase "firebase.google.com/go"
 	"github.com/sixync/birdlens-be/internal/database"
 	"github.com/sixync/birdlens-be/internal/env"
 	"github.com/sixync/birdlens-be/internal/jwt"
@@ -54,11 +57,12 @@ type config struct {
 }
 
 type application struct {
-	config     config
-	store      *store.Storage
-	logger     *slog.Logger
-	mailer     *smtp.Mailer
-	wg         sync.WaitGroup
+	config config
+	store  *store.Storage
+	logger *slog.Logger
+	mailer *smtp.Mailer
+	wg     sync.WaitGroup
+
 	tokenMaker *jwt.JWTMaker
 }
 
@@ -100,6 +104,18 @@ func run(logger *slog.Logger) error {
 
 	mailer, err := smtp.NewMailer(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.from)
 	if err != nil {
+		return err
+	}
+
+	fbApp, err := firebase.NewApp(context.Background(), nil)
+	if err != nil {
+		log.Fatalf("error initializing firebase app: %v\n", err)
+		return err
+	}
+
+	authClient, err := fbApp.Auth(context.Background())
+	if err != nil {
+		log.Fatalf("error initializing auth client: %v\n", err)
 		return err
 	}
 

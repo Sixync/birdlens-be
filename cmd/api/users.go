@@ -66,7 +66,7 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 		Email:          req.Email,
 		Age:            req.Age,
 		AvatarUrl:      req.AvatarUrl,
-		HashedPassword: hashedPassword,
+		HashedPassword: &hashedPassword,
 	}
 	err = app.store.Users.Create(ctx, user)
 	if err != nil {

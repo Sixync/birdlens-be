@@ -1,0 +1,3 @@
+ALTER TABLE IF EXISTS users
+  ADD COLUMN firebase_uid VARCHAR(255),
+  ADD COLUMN auth_provider VARCHAR(255);

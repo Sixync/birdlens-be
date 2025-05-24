@@ -107,21 +107,6 @@ CREATE TABLE comments (
   FOREIGN KEY (post_id) REFERENCES posts(id)
 );
 
-CREATE TABLE equipment (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP
-);
-
-CREATE TABLE user_equipment (
-  user_id BIGINT NOT NULL,
-  equipment_id BIGINT NOT NULL,
-  PRIMARY KEY (user_id, equipment_id),
-  FOREIGN KEY (user_id) REFERENCES users(id),
-  FOREIGN KEY (equipment_id) REFERENCES equipment(id)
-);
-
 CREATE TABLE user_roles (
   user_id BIGINT NOT NULL,
   role_id BIGINT NOT NULL,

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sixync/birdlens-be/auth"
 	"github.com/sixync/birdlens-be/internal/request"
 	"github.com/sixync/birdlens-be/internal/response"
 	"github.com/sixync/birdlens-be/internal/store"
@@ -18,16 +19,6 @@ import (
 type LoginUserReq struct {
 	Username string `json:"username" validate:"required,min=3,max=20"`
 	Password string `json:"password" validate:"required,min=3"`
-}
-
-type RegisterUserReq struct {
-	Username  string  `json:"username" validate:"required,min=3,max=20"`
-	Password  string  `json:"password" validate:"required,min=3"`
-	Email     string  `json:"email" validate:"required,email"`
-	FirstName string  `json:"first_name" validate:"required,min=3,max=20"`
-	LastName  string  `json:"last_name" validate:"required,min=3,max=20"`
-	Age       int     `json:"age" validate:"required,min=1,max=120"`
-	AvatarUrl *string `json:"avatar_url"`
 }
 
 type RefreshTokenReq struct {
@@ -72,7 +63,7 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if matched := utils.CheckPasswordHash(req.Password, user.HashedPassword); !matched {
+	if matched := utils.CheckPasswordHash(req.Password, *user.HashedPassword); !matched {
 		app.invalidCredentials(w, r)
 		return
 	}
@@ -119,7 +110,7 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) {
-	var req RegisterUserReq
+	var req auth.RegisterUserReq
 	if err := request.DecodeJSON(w, r, &req); err != nil {
 		app.badRequest(w, r, err)
 		return
@@ -157,7 +148,7 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 		Email:          req.Email,
 		Age:            req.Age,
 		AvatarUrl:      req.AvatarUrl,
-		HashedPassword: hashedPassword,
+		HashedPassword: &hashedPassword,
 	}
 	err = app.store.Users.Create(ctx, user)
 	if err != nil {
@@ -259,7 +250,7 @@ func (app *application) handleUserSession(ctx context.Context, user *store.User,
 	return nil
 }
 
-func (app *application) validRegisterUserReq(ctx context.Context, req RegisterUserReq) (exists bool, msg string, err error) {
+func (app *application) validRegisterUserReq(ctx context.Context, req auth.RegisterUserReq) (exists bool, msg string, err error) {
 	con1, err := app.store.Users.EmailExists(ctx, req.Email)
 	if con1 {
 		msg += "email already exists\n"
