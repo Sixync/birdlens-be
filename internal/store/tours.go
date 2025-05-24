@@ -104,6 +104,7 @@ func (s *TourStore) GetAll(ctx context.Context, limit, offset int) (*PaginatedLi
 	if err != nil {
 		return nil, err
 	}
+
 	defer rows.Close()
 
 	var tours []*Tour

@@ -64,20 +64,28 @@ type Storage struct {
 	Location interface {
 		GetByID(ctx context.Context, id int64) (*Location, error)
 	}
+	Carts interface {
+		GetCartItemByCartId(ctx context.Context, id int64) ([]*CartItem, error)
+	}
+	Equipments interface {
+		GetByID(ctx context.Context, id int64) (*Equipment, error)
+	}
 }
 
 // We can create internal/postgres, internal/mongodb, internal/mysql
 // if we have multiple db
 func NewStore(db *sqlx.DB) *Storage {
 	return &Storage{
-		Users:     &UserStore{db},
-		Posts:     &PostStore{db},
-		Followers: &FollowerStore{db},
-		Sessions:  &SessionStore{db},
-		Comments:  &CommentStore{db},
-		Tours:     &TourStore{db},
-		Events:    &EventStore{db},
-		Location:  &LocationStore{db},
+		Users:      &UserStore{db},
+		Posts:      &PostStore{db},
+		Followers:  &FollowerStore{db},
+		Sessions:   &SessionStore{db},
+		Comments:   &CommentStore{db},
+		Tours:      &TourStore{db},
+		Events:     &EventStore{db},
+		Location:   &LocationStore{db},
+		Carts:      &CartStore{db},
+		Equipments: &EquipmentStore{db},
 	}
 }
 

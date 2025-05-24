@@ -117,12 +117,11 @@ func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 }
 
 // Helper to get UserClaims from context (optional but recommended)
-func (app *application) getUserClaimsFromCtx(r *http.Request) *jwt.UserClaims {
+func getUserClaimsFromCtx(r *http.Request) *jwt.UserClaims {
 	claims, ok := r.Context().Value(UserClaimsKey).(*jwt.UserClaims)
 	if !ok {
 		// This should not happen if middleware is correctly applied
 		// and always sets the claims. Could panic or log an error.
-		app.logger.Error("User claims not found in context where expected")
 		return nil
 	}
 	return claims

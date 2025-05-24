@@ -1,0 +1,31 @@
+CREATE TABLE carts (
+    id BIGINT NOT NULL PRIMARY KEY,
+    FOREIGN KEY (id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE TABLE equipments(
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    price DECIMAL(10, 2) NOT NULL,
+    image_url VARCHAR(255),
+    created_at TIMESTAMP(0) WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP(0) WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE cart_items (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    cart_id BIGINT NOT NULL,
+    tour_id BIGINT NOT NULL,
+    participants_no INT NOT NULL,
+    FOREIGN KEY (cart_id) REFERENCES carts(id) ON DELETE CASCADE,
+    FOREIGN KEY (tour_id) REFERENCES tours(id) ON DELETE CASCADE
+);
+
+CREATE TABLE cart_item_equipments (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    cart_item_id BIGINT NOT NULL,
+    equipment_id BIGINT NOT NULL,
+    FOREIGN KEY (cart_item_id) REFERENCES cart_items(id) ON DELETE CASCADE,
+    FOREIGN KEY (equipment_id) REFERENCES equipment(id) ON DELETE CASCADE
+);

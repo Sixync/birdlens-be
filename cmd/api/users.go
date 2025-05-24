@@ -92,7 +92,7 @@ func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) getCurrentUserProfileHandler(w http.ResponseWriter, r *http.Request) {
-	claims := app.getUserClaimsFromCtx(r)
+	claims := getUserClaimsFromCtx(r)
 
 	profile, err := app.store.Users.GetById(r.Context(), claims.ID)
 	if err != nil {
