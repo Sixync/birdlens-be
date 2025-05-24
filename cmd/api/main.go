@@ -11,12 +11,14 @@ import (
 	"sync"
 
 	firebase "firebase.google.com/go"
+	"github.com/sixync/birdlens-be/auth"
 	"github.com/sixync/birdlens-be/internal/database"
 	"github.com/sixync/birdlens-be/internal/env"
 	"github.com/sixync/birdlens-be/internal/jwt"
 	"github.com/sixync/birdlens-be/internal/smtp"
 	"github.com/sixync/birdlens-be/internal/store"
 	"github.com/sixync/birdlens-be/internal/version"
+	"google.golang.org/api/option"
 
 	"github.com/lmittmann/tint"
 )
@@ -57,13 +59,13 @@ type config struct {
 }
 
 type application struct {
-	config config
-	store  *store.Storage
-	logger *slog.Logger
-	mailer *smtp.Mailer
-	wg     sync.WaitGroup
-
-	tokenMaker *jwt.JWTMaker
+	config      config
+	store       *store.Storage
+	logger      *slog.Logger
+	mailer      *smtp.Mailer
+	wg          sync.WaitGroup
+	authService *auth.AuthService
+	tokenMaker  *jwt.JWTMaker
 }
 
 func run(logger *slog.Logger) error {
@@ -107,17 +109,20 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	fbApp, err := firebase.NewApp(context.Background(), nil)
+	opt := option.WithCredentialsJSON()
+	fbApp, err := firebase.NewApp(context.Background(), nil, opt)
 	if err != nil {
 		log.Fatalf("error initializing firebase app: %v\n", err)
 		return err
 	}
 
-	authClient, err := fbApp.Auth(context.Background())
+	c, err := fbApp.Auth(context.Background())
 	if err != nil {
 		log.Fatalf("error initializing auth client: %v\n", err)
 		return err
 	}
+
+	auth.NewAuthService(store, c)
 
 	tokenMaker := jwt.NewJWTMaker(cfg.jwt.secretKey)
 

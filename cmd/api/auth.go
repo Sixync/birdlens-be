@@ -12,12 +12,11 @@ import (
 	"github.com/sixync/birdlens-be/internal/request"
 	"github.com/sixync/birdlens-be/internal/response"
 	"github.com/sixync/birdlens-be/internal/store"
-	"github.com/sixync/birdlens-be/internal/utils"
 	"github.com/sixync/birdlens-be/internal/validator"
 )
 
 type LoginUserReq struct {
-	Username string `json:"username" validate:"required,min=3,max=20"`
+	Email    string `json:"username" validate:"required,min=3,max=20"`
 	Password string `json:"password" validate:"required,min=3"`
 }
 
@@ -51,62 +50,41 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	user, err := app.store.Users.GetByUsername(ctx, req.Username)
+	customToken, err := app.authService.Login(ctx, req.Email, req.Password)
 	if err != nil {
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			app.invalidCredentials(w, r)
-			return
-		default:
-			app.serverError(w, r, err)
-			return
-		}
-	}
-
-	if matched := utils.CheckPasswordHash(req.Password, *user.HashedPassword); !matched {
-		app.invalidCredentials(w, r)
+		app.badRequest(w, r, err)
 		return
 	}
 
 	// generate jwt
-	durationMin := app.config.jwt.accessTokenExpDurationMin
-	token, userClaims, err := app.tokenMaker.CreateToken(user.Id, user.Username, durationMin)
-	if err != nil {
-		app.serverError(w, r, err)
-		return
-	}
-
-	log.Println("pass create jwt token with token", token)
+	// durationMin := app.config.jwt.accessTokenExpDurationMin
+	// token, userClaims, err := app.tokenMaker.CreateToken(user.Id, user.Username, durationMin)
+	// if err != nil {
+	// 	app.serverError(w, r, err)
+	// 	return
+	// }
 
 	// create and store refresh token
 
-	refreshToken, err := app.tokenMaker.CreateRefreshToken()
-	if err != nil {
-		app.serverError(w, r, err)
-		return
-	}
-	log.Println("pass create refresh token with token", refreshToken)
+	// refreshToken, err := app.tokenMaker.CreateRefreshToken()
+	// if err != nil {
+	// 	app.serverError(w, r, err)
+	// 	return
+	// }
+	// log.Println("pass create refresh token with token", refreshToken)
+	//
+	// refreshTokenDuration := app.config.jwt.refreshTokenExpDurationDay
+	// refreshTokenExp := time.Now().Add(time.Hour * 24 * time.Duration(refreshTokenDuration))
+	//
+	// err = app.handleUserSession(ctx, user, refreshToken, refreshTokenExp)
+	// if err != nil {
+	// 	app.serverError(w, r, err)
+	// 	return
+	// }
+	//
+	log.Println("pass create session with result", customToken)
 
-	refreshTokenDuration := app.config.jwt.refreshTokenExpDurationDay
-	refreshTokenExp := time.Now().Add(time.Hour * 24 * time.Duration(refreshTokenDuration))
-
-	err = app.handleUserSession(ctx, user, refreshToken, refreshTokenExp)
-	if err != nil {
-		app.serverError(w, r, err)
-		return
-	}
-
-	result := &LoginUserRes{
-		SessionID:       user.Id,
-		AccessToken:     token,
-		RefreshToken:    refreshToken,
-		AccessTokenExp:  userClaims.ExpiresAt.Time,
-		RefreshTokenExp: refreshTokenExp,
-	}
-
-	log.Println("pass create session with result", result)
-
-	response.JSON(w, http.StatusOK, result, false, "login successful")
+	response.JSON(w, http.StatusOK, customToken, false, "login successful")
 }
 
 func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) {
@@ -124,45 +102,13 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 
 	ctx := r.Context()
 
-	// Check if user already UsernameExists
-	exists, msg, err := app.validRegisterUserReq(ctx, req)
+	customerToken, err := app.authService.Register(ctx, req)
 	if err != nil {
-		app.serverError(w, r, err)
-		return
-	}
-	if exists {
-		app.errorMessage(w, r, http.StatusBadRequest, msg, nil)
+		app.badRequest(w, r, err)
 		return
 	}
 
-	hashedPassword, err := utils.HashPassword(req.Password)
-	if err != nil {
-		app.serverError(w, r, err)
-		return
-	}
-
-	user := &store.User{
-		Username:       req.Username,
-		FirstName:      req.FirstName,
-		LastName:       req.LastName,
-		Email:          req.Email,
-		Age:            req.Age,
-		AvatarUrl:      req.AvatarUrl,
-		HashedPassword: &hashedPassword,
-	}
-	err = app.store.Users.Create(ctx, user)
-	if err != nil {
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			app.errorMessage(w, r, http.StatusBadRequest, "invalid credentials", nil)
-			return
-		default:
-			app.serverError(w, r, err)
-			return
-		}
-	}
-
-	response.JSON(w, http.StatusCreated, user, false, "register successfully")
+	response.JSON(w, http.StatusCreated, customerToken, false, "register successfully")
 }
 
 func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Request) {

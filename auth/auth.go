@@ -11,11 +11,6 @@ import (
 	"github.com/sixync/birdlens-be/internal/utils"
 )
 
-var (
-	ErrEmailExists    error = errors.New("email already used")
-	ErrUsernameExists error = errors.New("username already used")
-)
-
 type AuthService struct {
 	store    *store.Storage
 	FireAuth *auth.Client
@@ -63,18 +58,6 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 
 // Register creates a new user with the provided credentials and returns token
 func (s *AuthService) Register(ctx context.Context, req RegisterUserReq) (string, error) {
-	// Check if the user with the email already exists
-	exists, err := s.store.Users.EmailExists(ctx, req.Email)
-	if err != nil {
-		return "", err
-	}
-
-	if exists {
-		return "", ErrEmailExists
-	}
-
-	// Generate a UUID for the new user
-
 	// Generate a hash of the user's password using bcrypt
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
