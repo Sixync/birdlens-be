@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -103,26 +104,23 @@ func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		tokenStr := headerParts[1]
-		claims, err := app.tokenMaker.VerifyToken(tokenStr)
+		token, err := app.authService.FireAuth.VerifyIDToken(r.Context(), tokenStr)
 		if err != nil {
-			app.logger.Warn("Invalid token", "error", err, "token", tokenStr)
+			log.Println("Failed to verify ID token:", err)
 			app.errorMessage(w, r, http.StatusUnauthorized, "Invalid or expired token", nil)
 			return
 		}
+
+		if token == nil {
+			log.Println("token is null")
+			app.errorMessage(w, r, http.StatusUnauthorized, "Invalid or expired token", nil)
+			return
+		}
+
+		claims := jwt.NewFirebaseClaims(token)
 
 		// Token is valid, store claims in context
 		ctx := context.WithValue(r.Context(), UserClaimsKey, claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// Helper to get UserClaims from context (optional but recommended)
-func getUserClaimsFromCtx(r *http.Request) *jwt.UserClaims {
-	claims, ok := r.Context().Value(UserClaimsKey).(*jwt.UserClaims)
-	if !ok {
-		// This should not happen if middleware is correctly applied
-		// and always sets the claims. Could panic or log an error.
-		return nil
-	}
-	return claims
 }

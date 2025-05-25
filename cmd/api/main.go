@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -109,7 +110,15 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	opt := option.WithCredentialsJSON()
+	filePath := env.GetString("PATH_TO_FIREBASE_CREDS", "")
+	log.Println("path to firebase is", filePath)
+
+	if filePath == "" {
+		log.Fatal("please provide path to firebase credentials file")
+		return errors.ErrUnsupported
+	}
+
+	opt := option.WithCredentialsFile(filePath)
 	fbApp, err := firebase.NewApp(context.Background(), nil, opt)
 	if err != nil {
 		log.Fatalf("error initializing firebase app: %v\n", err)
@@ -122,16 +131,17 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
-	auth.NewAuthService(store, c)
+	auth := auth.NewAuthService(store, c)
 
 	tokenMaker := jwt.NewJWTMaker(cfg.jwt.secretKey)
 
 	app := &application{
-		config:     cfg,
-		store:      store,
-		logger:     logger,
-		mailer:     mailer,
-		tokenMaker: tokenMaker,
+		config:      cfg,
+		store:       store,
+		logger:      logger,
+		mailer:      mailer,
+		tokenMaker:  tokenMaker,
+		authService: auth,
 	}
 
 	return app.serveHTTP()

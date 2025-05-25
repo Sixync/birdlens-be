@@ -12,18 +12,18 @@ import (
 )
 
 type User struct {
-	Id             int64      `json:"id"`
-	FirebaseUID    *string    `json:"-"`
-	Username       string     `json:"username"`
-	Age            int        `json:"age"`
-	FirstName      string     `json:"first_name"`
-	LastName       string     `json:"last_name"`
-	Email          string     `json:"email"`
-	HashedPassword *string    `json:"-"`
-	AuthProvider   string     `json:"-"`
-	AvatarUrl      *string    `json:"avatar_url"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      *time.Time `json:"updated_at"`
+	Id             int64      `json:"id" db:"id"`
+	FirebaseUID    *string    `json:"-" db:"firebase_uid"`
+	Username       string     `json:"username" db:"username"`
+	Age            int        `json:"age" db:"age"`
+	FirstName      string     `json:"first_name" db:"first_name"`
+	LastName       string     `json:"last_name" db:"last_name"`
+	Email          string     `json:"email" db:"email"`
+	HashedPassword *string    `json:"-" db:"hashed_password"`
+	AuthProvider   string     `json:"-" db:"auth_provider"`
+	AvatarUrl      *string    `json:"avatar_url" db:"avatar_url"`
+	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt      *time.Time `json:"updated_at" db:"updated_at"`
 }
 
 type UserStore struct {
@@ -38,12 +38,12 @@ func (s *UserStore) Create(ctx context.Context, user *User) error {
 	query := `
 		INSERT INTO users (
 			username, age, first_name, last_name, 
-			email, hashed_password, avatar_url 
+			email, hashed_password, avatar_url, firebase_uid, auth_provider
 		) VALUES (
-      $1, $2, $3, $4, $5, $6, $7 
+      $1, $2, $3, $4, $5, $6, $7, $8, $9 
 		) RETURNING id, created_at`
 
-	err := s.db.QueryRowContext(ctx, query, user.Username, user.Age, user.FirstName, user.LastName, user.Email, user.HashedPassword, user.AvatarUrl).Scan(&user.Id, &user.CreatedAt)
+	err := s.db.QueryRowContext(ctx, query, user.Username, user.Age, user.FirstName, user.LastName, user.Email, user.HashedPassword, user.AvatarUrl, user.FirebaseUID, user.AuthProvider).Scan(&user.Id, &user.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -137,9 +137,12 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 	defer cancel()
 
 	var user User
-	query := `SELECT * FROM users WHERE email = ?`
+	query := `SELECT * FROM users WHERE email = $1`
 	err := s.db.GetContext(ctx, &user, query, email)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return &user, nil
@@ -173,4 +176,20 @@ func (s *UserStore) EmailExists(ctx context.Context, email string) (bool, error)
 		return false, err // Propagate the actual db error
 	}
 	return exists, nil
+}
+
+func (s *UserStore) GetByFirebaseUID(ctx context.Context, firebaseUID string) (*User, error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	var user User
+	query := `SELECT * FROM users WHERE firebase_uid = $1`
+	err := s.db.GetContext(ctx, &user, query, firebaseUID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
 }

@@ -41,17 +41,25 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 		return "", err
 	}
 
+	log.Printf("user found: %v", user)
+
 	// Check if the provided password matches the user's password
-	if matched := utils.CheckPasswordHash(password, *user.HashedPassword); matched {
+	if matched := utils.CheckPasswordHash(password, *user.HashedPassword); !matched {
 		return "", errors.New("incorrect password")
 	}
 
 	// Generate a Firebase custom token for the user
-	token, err := s.FireAuth.CustomToken(context.Background(), *user.FirebaseUID)
+	claims := map[string]any{
+		"username:": user.Username,
+	}
+
+	token, err := s.FireAuth.CustomTokenWithClaims(ctx, *user.FirebaseUID, claims)
 	if err != nil {
 		log.Printf("failed to generate custom token: %v", err)
 		return "", errors.New("internal server error")
 	}
+
+	log.Printf("generated custom token: %s", token)
 
 	return token, nil
 }
@@ -66,8 +74,22 @@ func (s *AuthService) Register(ctx context.Context, req RegisterUserReq) (string
 
 	// Create a new user in the database
 	user := req.toUser()
-	*user.FirebaseUID = uuid.New().String()
+
+	uid := uuid.New().String()
+
+	user.FirebaseUID = &uid
+
+	log.Println("Creating user with Firebase UID:", *user.FirebaseUID)
+
 	user.HashedPassword = &hashedPassword
+
+	if req.AuthProvider == "" {
+		req.AuthProvider = "firebase"
+	}
+
+	user.AuthProvider = req.AuthProvider
+
+	log.Println("user hashed password:", *user.HashedPassword)
 
 	s.store.Users.Create(ctx, user)
 

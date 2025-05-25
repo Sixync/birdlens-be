@@ -21,6 +21,7 @@ type Storage struct {
 		GetByUsername(ctx context.Context, username string) (*User, error)
 		UsernameExists(ctx context.Context, username string) (bool, error)
 		EmailExists(ctx context.Context, username string) (bool, error)
+		GetByFirebaseUID(ctx context.Context, firebaseUID string) (*User, error)
 	}
 	Posts interface {
 		Create(context.Context, *Post) error

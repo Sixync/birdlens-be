@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
+	"github.com/sixync/birdlens-be/internal/jwt"
 	"github.com/sixync/birdlens-be/internal/request"
 	"github.com/sixync/birdlens-be/internal/response"
 	"github.com/sixync/birdlens-be/internal/store"
@@ -92,9 +94,13 @@ func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) getCurrentUserProfileHandler(w http.ResponseWriter, r *http.Request) {
-	claims := getUserClaimsFromCtx(r)
+	user := app.getUserFromFirebaseClaimsCtx(r)
+	if user == nil {
+		app.unauthorized(w, r)
+		return
+	}
 
-	profile, err := app.store.Users.GetById(r.Context(), claims.ID)
+	profile, err := app.store.Users.GetById(r.Context(), user.Id)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
@@ -134,4 +140,26 @@ func (app *application) getUserMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), UserKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (app *application) getUserFromFirebaseClaimsCtx(r *http.Request) *store.User {
+	claims, ok := r.Context().Value(UserClaimsKey).(*jwt.FirebaseClaims)
+	if !ok {
+		// This should not happen if middleware is correctly applied
+		// and always sets the claims. Could panic or log an error.
+		return nil
+	}
+	if claims == nil {
+		log.Println("claims is nil")
+		return nil
+	}
+
+	ctx := r.Context()
+	user, err := app.store.Users.GetByFirebaseUID(ctx, claims.Uid)
+	if err != nil {
+		log.Printf("failed to get user by Firebase UID %s: %v", claims.Uid, err)
+		return nil
+	}
+
+	return user
 }
