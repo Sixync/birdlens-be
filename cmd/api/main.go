@@ -12,12 +12,14 @@ import (
 	"sync"
 
 	firebase "firebase.google.com/go"
+	"github.com/joho/godotenv"
 	"github.com/sixync/birdlens-be/auth"
 	"github.com/sixync/birdlens-be/internal/database"
 	"github.com/sixync/birdlens-be/internal/env"
 	"github.com/sixync/birdlens-be/internal/jwt"
 	"github.com/sixync/birdlens-be/internal/smtp"
 	"github.com/sixync/birdlens-be/internal/store"
+	mediamanager "github.com/sixync/birdlens-be/internal/store/media_manager"
 	"github.com/sixync/birdlens-be/internal/version"
 	"google.golang.org/api/option"
 
@@ -67,6 +69,7 @@ type application struct {
 	wg          sync.WaitGroup
 	authService *auth.AuthService
 	tokenMaker  *jwt.JWTMaker
+	mediaClient mediamanager.MediaClient
 }
 
 func run(logger *slog.Logger) error {
@@ -134,6 +137,13 @@ func run(logger *slog.Logger) error {
 	auth := auth.NewAuthService(store, c)
 
 	tokenMaker := jwt.NewJWTMaker(cfg.jwt.secretKey)
+	godotenv.Load("/env/cloudinary.env")
+
+	cldClient := mediamanager.NewCloudinaryClient()
+
+	if cldClient == nil {
+		return fmt.Errorf("failed to create media client")
+	}
 
 	app := &application{
 		config:      cfg,
@@ -142,6 +152,7 @@ func run(logger *slog.Logger) error {
 		mailer:      mailer,
 		tokenMaker:  tokenMaker,
 		authService: auth,
+		mediaClient: cldClient,
 	}
 
 	return app.serveHTTP()

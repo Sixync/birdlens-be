@@ -24,7 +24,7 @@ type Tour struct {
 	Location     *Location  `json:"location"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    *time.Time `json:"updated_at"`
-	// ImagesUrl []TourImages
+	ImagesUrl    []string   `json:"images_url"`
 }
 
 type TourStore struct {
@@ -47,6 +47,7 @@ func (s *TourStore) Create(ctx context.Context, tour *Tour) error {
 	return err
 }
 
+// TODO :Add tour images
 func (s *TourStore) GetByID(ctx context.Context, id int64) (*Tour, error) {
 	query := `SELECT id, event_id, name, description, thumbnail_url, price, duration, start_date, end_date, location_id, created_at, updated_at
         FROM tours WHERE id = $1`
@@ -106,7 +107,6 @@ func (s *TourStore) GetAll(ctx context.Context, limit, offset int) (*PaginatedLi
 	}
 
 	defer rows.Close()
-
 	var tours []*Tour
 	for rows.Next() {
 		tour := &Tour{}
@@ -121,4 +121,41 @@ func (s *TourStore) GetAll(ctx context.Context, limit, offset int) (*PaginatedLi
 		return nil, err
 	}
 	return paginatedList, nil
+}
+
+func (s *TourStore) AddTourImagesUrl(
+	ctx context.Context,
+	tourId int64,
+	imageUrl string,
+) error {
+	if len(imageUrl) == 0 {
+		return nil
+	}
+
+	query := `INSERT INTO tour_images (tour_id, image_url) VALUES 
+  ($1, $2) ON CONFLICT DO NOTHING
+  `
+	_, err := s.db.ExecContext(ctx, query, tourId, imageUrl)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *TourStore) GetTourImagesUrl(ctx context.Context, tourId int64) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	query := `SELECT image_url FROM tour_images WHERE tour_id = $1`
+	var urls []string
+	err := s.db.SelectContext(ctx, &urls, query, tourId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return urls, nil
 }

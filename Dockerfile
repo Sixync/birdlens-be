@@ -1,10 +1,12 @@
 FROM golang:1.24.3-alpine3.21 as builder
 
-RUN mkdir /app && mkdir /env;
+RUN mkdir /app && mkdir /env && mkdir /bgs;
 
 COPY . /app
 
-COPY ./env/birdlens-creds.json /env
+COPY ./env /env
+
+COPY ./bgs /bgs
 
 WORKDIR /app
 
@@ -20,6 +22,6 @@ COPY --from=builder /app/birdlens-be .
 
 COPY --from=builder /env /env
 
-RUN cat /env/birdlens-creds.json
+COPY --from=builder /bgs /bgs
 
 CMD [ "/app/birdlens-be" ]

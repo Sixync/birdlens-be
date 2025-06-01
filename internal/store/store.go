@@ -58,6 +58,8 @@ type Storage struct {
 		Update(ctx context.Context, tour *Tour) error
 		Delete(ctx context.Context, id int64) error
 		GetAll(ctx context.Context, limit, offset int) (*PaginatedList[*Tour], error)
+		AddTourImagesUrl(ctx context.Context, tourId int64, imageUrl string) error
+		GetTourImagesUrl(ctx context.Context, tourId int64) ([]string, error)
 	}
 	Events interface {
 		GetByID(ctx context.Context, id int64) (*Event, error)
