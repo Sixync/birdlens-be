@@ -34,8 +34,13 @@ type RegisterUserReq struct {
 	AuthProvider string  `json:"auth_provider"`
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (string, error) {
+func (s *AuthService) Login(ctx context.Context,
+	email,
+	password,
+	subscription string,
+) (string, error) {
 	// Get the user from the database
+	log.Println("Attempting to login user with info:", email, password, subscription)
 	user, err := s.store.Users.GetByEmail(ctx, email)
 	if err != nil {
 		return "", err
@@ -50,7 +55,8 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 
 	// Generate a Firebase custom token for the user
 	claims := map[string]any{
-		"username:": user.Username,
+		"username":     user.Username,
+		"subscription": subscription,
 	}
 
 	token, err := s.FireAuth.CustomTokenWithClaims(ctx, *user.FirebaseUID, claims)

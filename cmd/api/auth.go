@@ -50,7 +50,20 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	customToken, err := app.authService.Login(ctx, req.Email, req.Password)
+
+	var subParam string
+
+	subscription, err := app.store.Subscriptions.GetUserSubscriptionByEmail(ctx, req.Email)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		app.serverError(w, r, err)
+		return
+	}
+
+	if subscription != nil {
+		subParam = subscription.Name
+	}
+
+	customToken, err := app.authService.Login(ctx, req.Email, req.Password, subParam)
 	if err != nil {
 		app.badRequest(w, r, err)
 		return

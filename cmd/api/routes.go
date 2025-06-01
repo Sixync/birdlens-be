@@ -42,6 +42,15 @@ func (app *application) routes() http.Handler {
 		r.With(app.getTourMiddleware).Put("/{tour_id}/thumbnail", app.addTourThumbnailHandler)
 	})
 
+	// subscriptions
+	mux.Route("/subscriptions", func(r chi.Router) {
+		// TODO: Add authentication middleware later
+		r.Get("/", app.getSubscriptionsHandler)
+		r.Post("/", app.createSubscriptionHandler)
+		// TODO: This one
+		// r.Put("/{user_id}/subscribe", app.subscribeUserHandler)
+	})
+
 	return mux
 }
 

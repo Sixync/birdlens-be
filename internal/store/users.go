@@ -14,6 +14,7 @@ import (
 type User struct {
 	Id             int64      `json:"id" db:"id"`
 	FirebaseUID    *string    `json:"-" db:"firebase_uid"`
+	SubscriptionId *string    `json:"-" db:"subscription_id"`
 	Username       string     `json:"username" db:"username"`
 	Age            int        `json:"age" db:"age"`
 	FirstName      string     `json:"first_name" db:"first_name"`
@@ -137,7 +138,11 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 	defer cancel()
 
 	var user User
-	query := `SELECT * FROM users WHERE email = $1`
+	query := `
+    SELECT * FROM users
+    WHERE email = $1
+  `
+
 	err := s.db.GetContext(ctx, &user, query, email)
 	if err != nil {
 		if err == sql.ErrNoRows {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log"
 	"net/http"
@@ -43,6 +44,16 @@ type CreateUserReq struct {
 	Email     string  `json:"email"`
 	Age       int     `json:"age"`
 	AvatarUrl *string `json:"avatar_url"`
+}
+
+type UserResponse struct {
+	Username     string  `json:"username"`
+	FirstName    string  `json:"first_name"`
+	LastName     string  `json:"last_name"`
+	Email        string  `json:"email"`
+	Age          int     `json:"age"`
+	AvatarUrl    *string `json:"avatar_url"`
+	Subscription string  `json:"subscription,omitempty"`
 }
 
 func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -99,14 +110,37 @@ func (app *application) getCurrentUserProfileHandler(w http.ResponseWriter, r *h
 		app.unauthorized(w, r)
 		return
 	}
+	ctx := r.Context()
 
-	profile, err := app.store.Users.GetById(r.Context(), user.Id)
+	profile, err := app.store.Users.GetById(ctx, user.Id)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
 	}
 
-	if err := response.JSON(w, http.StatusOK, profile, false, "get successful"); err != nil {
+	subscription, err := app.store.Subscriptions.GetUserSubscriptionByEmail(ctx, profile.Email)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		app.serverError(w, r, err)
+		return
+	}
+
+	log.Printf("get user sub: %+v", subscription)
+
+	res := &UserResponse{
+		Username:     profile.Username,
+		FirstName:    profile.FirstName,
+		LastName:     profile.LastName,
+		Email:        profile.Email,
+		Age:          profile.Age,
+		AvatarUrl:    profile.AvatarUrl,
+		Subscription: "",
+	}
+
+	if subscription != nil {
+		res.Subscription = subscription.Name
+	}
+
+	if err := response.JSON(w, http.StatusOK, res, false, "get successful"); err != nil {
 		app.serverError(w, r, err)
 	}
 }

@@ -73,22 +73,28 @@ type Storage struct {
 	Equipments interface {
 		GetByID(ctx context.Context, id int64) (*Equipment, error)
 	}
+	Subscriptions interface {
+		GetUserSubscriptionByEmail(ctx context.Context, email string) (*Subscription, error)
+		GetAll(ctx context.Context) ([]*Subscription, error)
+		Create(ctx context.Context, subscription *Subscription) error
+	}
 }
 
 // We can create internal/postgres, internal/mongodb, internal/mysql
 // if we have multiple db
 func NewStore(db *sqlx.DB) *Storage {
 	return &Storage{
-		Users:      &UserStore{db},
-		Posts:      &PostStore{db},
-		Followers:  &FollowerStore{db},
-		Sessions:   &SessionStore{db},
-		Comments:   &CommentStore{db},
-		Tours:      &TourStore{db},
-		Events:     &EventStore{db},
-		Location:   &LocationStore{db},
-		Carts:      &CartStore{db},
-		Equipments: &EquipmentStore{db},
+		Users:         &UserStore{db},
+		Posts:         &PostStore{db},
+		Followers:     &FollowerStore{db},
+		Sessions:      &SessionStore{db},
+		Comments:      &CommentStore{db},
+		Tours:         &TourStore{db},
+		Events:        &EventStore{db},
+		Location:      &LocationStore{db},
+		Carts:         &CartStore{db},
+		Equipments:    &EquipmentStore{db},
+		Subscriptions: &SubscriptionStore{db},
 	}
 }
 
