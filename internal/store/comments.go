@@ -27,6 +27,7 @@ func (s *CommentStore) GetById(ctx context.Context, commentId int64) (*Comment, 
 	query := `SELECT id, post_id, user_id, content, created_at, updated_at 
         FROM comments WHERE id = $1`
 	var comment Comment
+
 	err := s.db.QueryRowContext(ctx, query, commentId).Scan(&comment.ID, &comment.PostID,
 		&comment.UserID, &comment.Content, &comment.CreatedAt, &comment.UpdatedAt)
 	if err != nil {

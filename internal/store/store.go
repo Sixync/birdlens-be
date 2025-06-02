@@ -63,6 +63,9 @@ type Storage struct {
 	}
 	Events interface {
 		GetByID(ctx context.Context, id int64) (*Event, error)
+		Create(ctx context.Context, event *Event) error
+		GetAll(ctx context.Context, limit, offset int) (*PaginatedList[*Event], error)
+		Delete(ctx context.Context, id int64) error
 	}
 	Location interface {
 		GetByID(ctx context.Context, id int64) (*Location, error)
