@@ -8,11 +8,13 @@ services:
       mode: replicated
       replicas: 1
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: birdlens
     volumes:
       - db-data:/var/lib/postgresql/data
+    networks:
+      - birdlens-network
 
   birdlens-be:
     build:
@@ -28,10 +30,21 @@ services:
       ACCESS_TOKEN_EXP_MIN: 10
       REFRESH_TOKEN_EXP_DAY : 14
       PATH_TO_FIREBASE_CREDS: /env/birdlens-creds.json
-
     deploy:
       mode: replicated
       replicas: 3
+    networks:
+      - birdlens-network
+
+  migrate:
+    image: migrate/migrate:latest
+    command: "migrate -path=/migrations -database='postgres://${DB_USER}:${DB_PASSWORD}@birdlens-db:5432/birdlens?sslmode=disable' up"
+    volumes:
+      - ./cmd/migrate/migrations/:/migrations
+    depends_on:
+      - birdlens-db
+    networks:
+      - birdlens-network
 
   nginx:
     image: nginx:1.27
@@ -45,6 +58,12 @@ services:
     depends_on:
       - birdlens-be
     restart: always
+    networks:
+      - birdlens-network
 
 volumes:
   db-data:
+
+networks:
+  birdlens-network:
+    driver: bridge

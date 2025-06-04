@@ -24,7 +24,7 @@ func (app *application) routes() http.Handler {
 	mux.Route("/users", func(r chi.Router) {
 		r.With(app.paginate).With(app.getUserMiddleware).Get("/{user_id}/followers", app.getUserFollowersHandler)
 		r.Post("/", app.createUserHandler)
-		r.With(app.AuthMiddleware).Get("/me", app.getCurrentUserProfileHandler)
+		r.With(app.authMiddleware).Get("/me", app.getCurrentUserProfileHandler)
 	})
 
 	mux.Route("/auth", func(r chi.Router) {
@@ -52,6 +52,15 @@ func (app *application) routes() http.Handler {
 	})
 
 	// events
+	mux.Route("/events", func(r chi.Router) {
+		// TODO: Add authentication middleware later
+		r.With(app.paginate).Get("/", app.getEventsHandler)
+		r.Post("/", app.createEventHandler)
+		r.With(app.getEventMiddleware).Get("/{event_id}", app.getEventHandler)
+		r.With(app.getEventMiddleware).Delete("/{event_id}", app.deleteEventHandler)
+	})
+
+	// bookmarks
 	mux.Route("/events", func(r chi.Router) {
 		// TODO: Add authentication middleware later
 		r.With(app.paginate).Get("/", app.getEventsHandler)

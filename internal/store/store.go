@@ -81,6 +81,13 @@ type Storage struct {
 		GetAll(ctx context.Context) ([]*Subscription, error)
 		Create(ctx context.Context, subscription *Subscription) error
 	}
+	Bookmarks interface {
+		Create(ctx context.Context, bookmark *Bookmark) error
+		Delete(ctx context.Context, userID int64, hotspotLocationID int64) error
+		GetByUserID(ctx context.Context, userID int64) ([]*Bookmark, error)
+		GetTrendingBookmarks(ctx context.Context, limit, offset int) (*PaginatedList[*Bookmark], error)
+		Exists(ctx context.Context, userID int64, hotspotLocationID string) (bool, error)
+	}
 }
 
 // We can create internal/postgres, internal/mongodb, internal/mysql
@@ -98,6 +105,7 @@ func NewStore(db *sqlx.DB) *Storage {
 		Carts:         &CartStore{db},
 		Equipments:    &EquipmentStore{db},
 		Subscriptions: &SubscriptionStore{db},
+		Bookmarks:     &BookmarksStore{db},
 	}
 }
 

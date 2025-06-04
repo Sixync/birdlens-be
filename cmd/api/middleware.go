@@ -87,7 +87,7 @@ func getPaginateFromCtx(r *http.Request) (limit, offset int) {
 	return
 }
 
-func (app *application) AuthMiddleware(next http.Handler) http.Handler {
+func (app *application) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -122,5 +122,22 @@ func (app *application) AuthMiddleware(next http.Handler) http.Handler {
 		// Token is valid, store claims in context
 		ctx := context.WithValue(r.Context(), UserClaimsKey, claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (app *application) adminRoutes(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := r.Context().Value(UserClaimsKey).(*jwt.FirebaseClaims)
+		if !ok || claims == nil {
+			app.unauthorized(w, r)
+			return
+		}
+
+		if !claims.() {
+			app.forbidden(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }
