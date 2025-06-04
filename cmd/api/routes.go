@@ -61,13 +61,13 @@ func (app *application) routes() http.Handler {
 	})
 
 	// bookmarks
-	mux.Route("/events", func(r chi.Router) {
-		// TODO: Add authentication middleware later
-		r.With(app.paginate).Get("/", app.getEventsHandler)
-		r.Post("/", app.createEventHandler)
-		r.With(app.getEventMiddleware).Get("/{event_id}", app.getEventHandler)
-		r.With(app.getEventMiddleware).Delete("/{event_id}", app.deleteEventHandler)
-	})
+	// mux.Route("/events", func(r chi.Router) {
+	// 	// TODO: Add authentication middleware later
+	// 	r.With(app.paginate).Get("/", app.getEventsHandler)
+	// 	r.Post("/", app.createEventHandler)
+	// 	r.With(app.getEventMiddleware).Get("/{event_id}", app.getEventHandler)
+	// 	r.With(app.getEventMiddleware).Delete("/{event_id}", app.deleteEventHandler)
+	// })
 
 	return mux
 }

@@ -125,19 +125,19 @@ func (app *application) authMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (app *application) adminRoutes(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		claims, ok := r.Context().Value(UserClaimsKey).(*jwt.FirebaseClaims)
-		if !ok || claims == nil {
-			app.unauthorized(w, r)
-			return
-		}
-
-		if !claims.() {
-			app.forbidden(w, r)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
+// func (app *application) adminRoutes(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		claims, ok := r.Context().Value(UserClaimsKey).(*jwt.FirebaseClaims)
+// 		if !ok || claims == nil {
+// 			app.unauthorized(w, r)
+// 			return
+// 		}
+//
+// 		if !claims.() {
+// 			app.forbidden(w, r)
+// 			return
+// 		}
+//
+// 		next.ServeHTTP(w, r)
+// 	})
+// }
