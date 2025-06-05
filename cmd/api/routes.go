@@ -17,8 +17,11 @@ func (app *application) routes() http.Handler {
 	mux.Use(app.recoverPanic)
 
 	mux.Route("/posts", func(r chi.Router) {
-		r.With(app.paginate).Get("/", app.getPostsHandler)
-		r.With(app.paginate).With(app.getPostMiddleware).Get("/{post_id}/comments", app.getPostCommentsHandler)
+		r.With(app.authMiddleware).With(app.paginate).Get("/", app.getPostsHandler)
+		r.With(app.authMiddleware).Post("/", app.createPostHandler)
+		r.With(app.authMiddleware).With(app.getPostMiddleware).With(app.paginate).Get("/{post_id}/comments", app.getPostCommentsHandler)
+		r.With(app.authMiddleware).With(app.getPostMiddleware).Post("/{post_id}/reactions", app.addUserReactionHandler)
+		r.With(app.authMiddleware).With(app.getPostMiddleware).Post("/{post_id}/comments", app.createCommentHandler)
 	})
 
 	mux.Route("/users", func(r chi.Router) {
