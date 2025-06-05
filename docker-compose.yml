@@ -37,10 +37,10 @@ services:
       - birdlens-network
 
   migrate:
-    image: migrate/migrate:latest
-    command: "migrate -path=/migrations -database='postgres://${DB_USER}:${DB_PASSWORD}@birdlens-db:5432/birdlens?sslmode=disable' up"
+    image: migrate/migrate:4
     volumes:
       - ./cmd/migrate/migrations/:/migrations
+    command: [ "-path", "/migrations", "-database", "postgres://${DB_USER}:${DB_PASSWORD}@birdlens-db:5432/birdlens?sslmode=disable", "up" ]
     depends_on:
       - birdlens-db
     networks:
