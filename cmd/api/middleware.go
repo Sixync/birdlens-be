@@ -119,6 +119,8 @@ func (app *application) authMiddleware(next http.Handler) http.Handler {
 
 		claims := jwt.NewFirebaseClaims(token)
 
+		log.Println("Token claims:", claims)
+
 		// Token is valid, store claims in context
 		ctx := context.WithValue(r.Context(), UserClaimsKey, claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
