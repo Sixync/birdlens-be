@@ -191,6 +191,8 @@ func (app *application) getUserFromFirebaseClaimsCtx(r *http.Request) *store.Use
 		return nil
 	}
 
+	log.Println("getUserFromFirebaseClaimsCtx claims:", claims)
+
 	ctx := r.Context()
 	user, err := app.store.Users.GetByFirebaseUID(ctx, claims.Uid)
 	if err != nil {
