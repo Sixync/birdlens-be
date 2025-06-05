@@ -43,6 +43,7 @@ services:
     command: [ "-path", "/migrations", "-database", "postgres://${DB_USER}:${DB_PASSWORD}@birdlens-db:5432/birdlens?sslmode=disable", "up" ]
     depends_on:
       - birdlens-db
+      - birdlens-be
     networks:
       - birdlens-network
 
@@ -61,11 +62,11 @@ services:
     networks:
       - birdlens-network
 
-  jenkins:
+  jenkins-birdlens:
     image: jenkins/jenkins:jdk21
     privileged: true
     user: root
-    container_name: jenkins
+    container_name: jenkins-container
     ports:
       - "8081:8080"
       - "50000:50000"
