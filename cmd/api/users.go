@@ -106,6 +106,9 @@ func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
 
 func (app *application) getCurrentUserProfileHandler(w http.ResponseWriter, r *http.Request) {
 	user := app.getUserFromFirebaseClaimsCtx(r)
+
+	log.Println("getCurrentUserProfileHandler user:", user)
+
 	if user == nil {
 		app.unauthorized(w, r)
 		return
@@ -187,6 +190,8 @@ func (app *application) getUserFromFirebaseClaimsCtx(r *http.Request) *store.Use
 		log.Println("claims is nil")
 		return nil
 	}
+
+	log.Println("getUserFromFirebaseClaimsCtx claims:", claims)
 
 	ctx := r.Context()
 	user, err := app.store.Users.GetByFirebaseUID(ctx, claims.Uid)
