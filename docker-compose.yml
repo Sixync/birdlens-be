@@ -40,7 +40,7 @@ services:
     image: migrate/migrate:4
     volumes:
       - ./cmd/migrate/migrations/:/migrations
-    command: [ "-path", "/migrations", "-database", "postgres://${DB_USER}:${DB_PASSWORD}@birdlens0db:5432/birdlens?sslmode=disable", "up" ]
+    command: [ "-path", "/migrations", "-database", "postgres://${DB_USER}:${DB_PASSWORD}@birdlens-db:5432/birdlens?sslmode=disable", "up" ]
     depends_on:
       - birdlens-db
     networks:
