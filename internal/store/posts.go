@@ -54,16 +54,14 @@ func (s *PostStore) Create(ctx context.Context, post *Post) error {
 
 	query := `
     INSERT INTO posts (content, location_name, latitude, longitude, privacy_level, type, is_featured)
-    VALUES (:content, :location_name, :latitude, :longitude, :privacy_level, :type, :is_featured)
-    RETURNING id, created_at, updated_at`
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING id, created_at`
 
-	result, err := s.db.NamedExecContext(ctx, query, post)
+	err := s.db.QueryRowContext(ctx, query, post.Content, post.LocationName, post.Latitude, post.Longitude, post.PrivacyLevel, post.Type, post.IsFeatured).Scan(&post.Id, &post.CreatedAt)
 	if err != nil {
 		log.Println("Create post error", err)
 		return err
 	}
-
-	log.Println("Create post result", result)
 
 	return nil
 }
@@ -292,7 +290,7 @@ func (s *PostStore) UserLiked(ctx context.Context, userId, postId int64) (bool, 
 	return exists, nil
 }
 
-func (s *PostStore) AddMediaUrl(ctx context.Context, postId int64, mediaUrls string) error {
+func (s *PostStore) AddMediaUrl(ctx context.Context, postId int64, mediaUrl string) error {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
@@ -301,7 +299,7 @@ func (s *PostStore) AddMediaUrl(ctx context.Context, postId int64, mediaUrls str
     VALUES ($1, $2)
     ON CONFLICT DO NOTHING
   `
-	_, err := s.db.ExecContext(ctx, query, postId)
+	_, err := s.db.ExecContext(ctx, query, postId, mediaUrl)
 	if err != nil {
 		return err
 	}

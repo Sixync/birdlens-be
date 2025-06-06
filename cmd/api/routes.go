@@ -24,6 +24,14 @@ func (app *application) routes() http.Handler {
 		r.With(app.authMiddleware).With(app.getPostMiddleware).Post("/{post_id}/comments", app.createCommentHandler)
 	})
 
+	mux.Route("/comments", func(r chi.Router) {
+		r.With(app.authMiddleware).With(app.paginate).Get("/", app.getPostsHandler)
+		r.With(app.authMiddleware).Post("/", app.createPostHandler)
+		r.With(app.authMiddleware).With(app.getPostMiddleware).With(app.paginate).Get("/{post_id}/comments", app.getPostCommentsHandler)
+		r.With(app.authMiddleware).With(app.getPostMiddleware).Post("/{post_id}/reactions", app.addUserReactionHandler)
+		r.With(app.authMiddleware).With(app.getPostMiddleware).Post("/{post_id}/comments", app.createCommentHandler)
+	})
+
 	mux.Route("/users", func(r chi.Router) {
 		r.With(app.paginate).With(app.getUserMiddleware).Get("/{user_id}/followers", app.getUserFollowersHandler)
 		r.Post("/", app.createUserHandler)
