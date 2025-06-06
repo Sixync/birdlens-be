@@ -234,7 +234,8 @@ func (app *application) addTourImagesHandler(
 
 	var urls []string
 	for _, uploadedImage := range uploadedImages {
-		url, err := app.uploadTourImageToCloudinary(ctx, "images", tour.ID, uploadedImage.Filename, uploadedImage.FileContent)
+		filePath := fmt.Sprintf("tours/%v/images/%v", tour.ID, uploadedImage.Filename)
+		url, err := app.uploadFileToCloudinary(ctx, "images", tour.ID, filePath, uploadedImage.FileContent)
 		if err != nil {
 			log.Println("error uploading tour image:", err)
 			app.serverError(w, r, fmt.Errorf("failed to upload tour image: %w", err))
@@ -322,7 +323,8 @@ func (app *application) addTourThumbnailHandler(
 		return
 	}
 
-	url, err := app.uploadTourImageToCloudinary(ctx, "thumbnail", tour.ID, uploadedImage.Filename, uploadedImage.FileContent)
+	filePath := fmt.Sprintf("tours/%v/thumbnail", tour.ID)
+	url, err := app.uploadFileToCloudinary(ctx, "images", tour.ID, filePath, uploadedImage.FileContent)
 	if err != nil {
 		log.Println("error uploading thumbnail image:", err)
 		app.serverError(w, r, fmt.Errorf("failed to upload thumbnail image: %w", err))
@@ -380,16 +382,20 @@ func (app *application) getTourFromContext(r *http.Request) (*store.Tour, error)
 	return tour, nil
 }
 
-func (app *application) uploadTourImageToCloudinary(
+// TODO: Use fileType to determine the type of file being uploaded
+func (app *application) uploadFileToCloudinary(
 	ctx context.Context,
 	fileType string,
-	tourId int64,
-	fileName string,
+	objectId int64,
+	filePath string,
 	fileData []byte,
 ) (string, error) {
-	imagePath := fmt.Sprintf("tours/%v/%v", tourId, fileType)
+	// object id to string
+	objectIdStr := strconv.FormatInt(objectId, 10)
+
+	// TODO: refactor this function to use upload different media types (videos,...)
 	imageBase64 := fmt.Sprintf("data:image/jpeg;base64,%v", base64.StdEncoding.EncodeToString(fileData))
-	imageUrl, err := app.mediaClient.Upload(ctx, fileName, imagePath, imageBase64)
+	imageUrl, err := app.mediaClient.Upload(ctx, objectIdStr, filePath, imageBase64)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload image: %w", err)
 	}

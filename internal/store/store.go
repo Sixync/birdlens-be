@@ -29,6 +29,12 @@ type Storage struct {
 		Update(ctx context.Context, post *Post) error
 		Delete(ctx context.Context, postId int64) error
 		GetAll(ctx context.Context, limit, offset int) (*PaginatedList[*Post], error)
+		GetLikeCounts(ctx context.Context, postId int64) (int, error)
+		GetCommentCounts(ctx context.Context, postId int64) (int, error)
+		GetMediaUrlsById(ctx context.Context, postId int64) ([]string, error)
+		UserLiked(ctx context.Context, userId, postId int64) (bool, error)
+		AddUserReaction(ctx context.Context, userId, postId int64, reactionType string) error
+		AddMediaUrl(ctx context.Context, postId int64, mediaUrls string) error
 	}
 	Followers interface {
 		Create(ctx context.Context, follower *Follower) error
