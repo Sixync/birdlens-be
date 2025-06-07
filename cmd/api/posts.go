@@ -87,11 +87,19 @@ func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) 
 		postResponse.IsLiked = isLiked
 		postResponses = append(postResponses, postResponse)
 	}
+	res := store.PaginatedList[PostResponse]{
+		Items:      postResponses,
+		TotalCount: posts.TotalCount,
+		TotalPages: posts.TotalPages,
+		Page:       posts.Page,
+		PageSize:   posts.PageSize,
+	}
+
 	log.Println("post responses", postResponses)
 
 	// transform to postResponse
 
-	response.JSON(w, http.StatusOK, postResponses, false, "get successful")
+	response.JSON(w, http.StatusOK, res, false, "get successful")
 }
 
 func (app *application) addUserReactionHandler(w http.ResponseWriter, r *http.Request) {
