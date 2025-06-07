@@ -82,8 +82,8 @@ services:
     depends_on:
       - jenkins-birdlens
     environment:
-      JENKINS_URL: http://jenkins-birdlens:8080
-      JENKINS_AGENT_NAME: "birdlens-agent"
+      JENKINS_URL: ${AGENT_URL}
+      JENKINS_AGENT_NAME: ${AGENT_NAME}
       JENKINS_SECRET: ${AGENT_SECRET}
     networks:
       - birdlens-network
