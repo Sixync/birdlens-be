@@ -27,3 +27,5 @@ func New(dbConn string) (*sqlx.DB, error) {
 
 	return db, nil
 }
+
+// Ping checks the database connection.
