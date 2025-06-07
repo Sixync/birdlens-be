@@ -25,7 +25,7 @@ services:
     restart: always
     environment:
       DB_ADDR: postgres://admin:password@birdlens-db:5432/birdlens?sslmode=disable
-      HTTP_PORT: 8080
+      HTTP_PORT: 6969
       ENV: "dev"
       ACCESS_TOKEN_EXP_MIN: 10
       REFRESH_TOKEN_EXP_DAY : 14
@@ -71,12 +71,26 @@ services:
       - "8081:8080"
       - "50000:50000"
     volumes:
-      - /home/$(myname)/jenkins_compose/jenkins_configuration:/var/jenkins_home
+      - /home/$(myname)/jenkins_compose/jenkins_configuration/:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - birdlens-network
+
+  jenkin-agent:
+    image: jenkins/inbound-agent
+    container_name: jenkins-agent
+    depends_on:
+      - jenkins-birdlens
+    environment:
+      JENKINS_URL: http://jenkins-birdlens:8080
+      JENKINS_AGENT_NAME: "birdlens-agent"
+      JENKINS_SECRET: ${AGENT_SECRET}
+    networks:
+      - birdlens-network
 
 volumes:
   db-data:
 
 networks:
   birdlens-network:
-    driver: bridge
+    external: true
