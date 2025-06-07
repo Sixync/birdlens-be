@@ -1,3 +1,4 @@
+// birdlens-be/cmd/api/posts.go
 package main
 
 import (
@@ -19,6 +20,7 @@ import (
 var PostKey key = "post"
 
 type PostResponse struct {
+	ID              int64     `json:"id"` // them post id cho cai may cai comment con get nua
 	PosterAvatarUrl *string   `json:"poster_avatar_url"`
 	PosterName      string    `json:"poster_name"`
 	CreatedAt       time.Time `json:"created_at"`
@@ -54,6 +56,7 @@ func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) 
 	for _, post := range posts.Items {
 		var postResponse PostResponse
 
+		postResponse.ID = post.Id // them cai id nay vo
 		postResponse.PosterAvatarUrl = currentUser.AvatarUrl
 		postResponse.PosterName = currentUser.Username
 		postResponse.CreatedAt = post.CreatedAt
