@@ -517,3 +517,7 @@ func Get() string {
 ## Changing the module path
 
 The module path is currently set to `github.com/sixync/birdlens-be`. If you want to change this please find and replace all instances of `github.com/sixync/birdlens-be` in the codebase with your own module path.
+
+## You reached the end, very good!
+## Don't scroll down any further, you will not find anything useful here.
+## Really, you won't.
