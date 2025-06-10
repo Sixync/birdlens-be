@@ -58,7 +58,7 @@ func (maker *JWTMaker) VerifyToken(tokenStr string) (*UserClaims, error) {
 	return nil, errors.New("invalid token claims")
 }
 
-func (maker *JWTMaker) CreateRefreshToken() (string, error) {
+func (maker *JWTMaker) CreateRandomToken() (string, error) {
 	// Generate a secure random token
 	tokenBytes := make([]byte, 32)
 	_, err := rand.Read(tokenBytes)

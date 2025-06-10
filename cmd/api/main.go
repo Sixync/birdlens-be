@@ -38,9 +38,10 @@ func main() {
 }
 
 type config struct {
-	httpPort  int
-	baseURL   string
-	basicAuth struct {
+	httpPort    int
+	baseURL     string
+	frontEndUrl string
+	basicAuth   struct {
 		username       string
 		hashedPassword string
 	}
@@ -59,8 +60,14 @@ type config struct {
 		accessTokenExpDurationMin  int
 		refreshTokenExpDurationDay int
 	}
+	emailVerificationExpiresInHours int
 }
 
+type EmailJob struct {
+	Recipient string
+	Data      any
+	Patterns  []string
+}
 type application struct {
 	config      config
 	store       *store.Storage
@@ -72,25 +79,32 @@ type application struct {
 	mediaClient mediamanager.MediaClient
 }
 
+var JobQueue = make(chan EmailJob, 100)
+
 func run(logger *slog.Logger) error {
 	var cfg config
 
-	cfg.httpPort = env.GetInt("HTTP_PORT", 8090)
+	cfg.httpPort = env.GetInt("HTTP_PORT", 6969)
+	godotenv.Load("/env/mail.env")
+	godotenv.Load("/env/.env")
 
 	// boilerplate
 	cfg.baseURL = env.GetString("BASE_URL", "http://localhost:8090")
 	cfg.basicAuth.username = env.GetString("BASIC_AUTH_USERNAME", "admin")
 	cfg.basicAuth.hashedPassword = env.GetString("BASIC_AUTH_HASHED_PASSWORD", "$2a$10$jRb2qniNcoCyQM23T59RfeEQUbgdAXfR6S0scynmKfJa5Gj3arGJa")
 	cfg.db.dbConn = env.GetString("DB_ADDR", "postgres://admin:password@birdlens-db:5432/birdlens?sslmode=disable")
-	cfg.smtp.host = env.GetString("SMTP_HOST", "example.smtp.host")
-	cfg.smtp.port = env.GetInt("SMTP_PORT", 25)
-	cfg.smtp.username = env.GetString("SMTP_USERNAME", "example_username")
-	cfg.smtp.password = env.GetString("SMTP_PASSWORD", "pa55word")
-	cfg.smtp.from = env.GetString("SMTP_FROM", "Example Name <no_reply@example.org>")
+	cfg.smtp.host = env.GetString("SMTP_HOST", "mailpit")
+	cfg.smtp.port = env.GetInt("SMTP_PORT", 1025)
+	cfg.smtp.username = env.GetString("SMTP_USERNAME", "")
+	cfg.smtp.password = env.GetString("SMTP_PASSWORD", "")
+	cfg.smtp.from = env.GetString("SMTP_FROM", "test@example.com")
 	cfg.jwt.secretKey = env.GetString("JWT_SECRET_KEY", "THISISASECRETKEYHALLELUJAHBABY123123123123123123123")
 	cfg.jwt.accessTokenExpDurationMin = env.GetInt("ACCESS_TOKEN_EXP_MIN", 15)
 	cfg.jwt.refreshTokenExpDurationDay = env.GetInt("REFRESH_TOKEN_EXP_DAY", 1)
+	cfg.frontEndUrl = env.GetString("FRONTEND_URL", "http://localhost")
+	cfg.emailVerificationExpiresInHours = env.GetInt("EMAIL_VERIFICATION_EXPIRES_IN_HOURS", 7)
 
+	log.Println("frontend url is", cfg.frontEndUrl)
 	showVersion := flag.Bool("version", false, "display version and exit")
 
 	flag.Parse()
@@ -112,6 +126,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+
+	log.Println("host:", cfg.smtp.host, "port:", cfg.smtp.port, "username:", cfg.smtp.username, "from:", cfg.smtp.from, "password:", cfg.smtp.password)
+
+	startWorkerPool(mailer, 5)
 
 	filePath := env.GetString("PATH_TO_FIREBASE_CREDS", "")
 	log.Println("path to firebase is", filePath)
@@ -156,4 +174,31 @@ func run(logger *slog.Logger) error {
 	}
 
 	return app.serveHTTP()
+}
+
+func worker(mailer *smtp.Mailer, id int) {
+	// The `for range` on a channel will block until a job is available
+	// or the channel is closed.
+	for job := range JobQueue {
+		log.Printf("Worker %d: processing email job for %s", id, job.Recipient)
+
+		// Use the global Mailer instance to send the email.
+		// Your Send method already has a built-in retry mechanism, which is great!
+		err := mailer.Send(job.Recipient, job.Data, job.Patterns...)
+		if err != nil {
+			// If all 3 retries fail, we log the final error.
+			log.Printf("Worker %d: FAILED to send email to %s after retries: %v", id, job.Recipient, err)
+		} else {
+			log.Printf("Worker %d: successfully sent email to %s", id, job.Recipient)
+		}
+	}
+}
+
+// startWorkerPool starts a fixed number of workers.
+func startWorkerPool(mailer *smtp.Mailer, numWorkers int) {
+	for w := 1; w <= numWorkers; w++ {
+		// Launch each worker in its own goroutine.
+		go worker(mailer, w)
+	}
+	log.Printf("Started %d email workers", numWorkers)
 }

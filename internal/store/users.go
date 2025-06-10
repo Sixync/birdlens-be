@@ -198,3 +198,60 @@ func (s *UserStore) GetByFirebaseUID(ctx context.Context, firebaseUID string) (*
 	}
 	return &user, nil
 }
+
+func (s *UserStore) AddEmailVerificationToken(ctx context.Context, userId int64, token string, expiresAt time.Time) error {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	query := `
+    UPDATE users
+    SET email_verification_token = $1, email_verification_token_expires_at = $2
+    WHERE id = $3;
+  `
+
+	_, err := s.db.ExecContext(ctx, query, token, expiresAt, userId)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *UserStore) GetEmailVerificationToken(ctx context.Context, userId int64) (token string, expiresAt time.Time, err error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	query := `
+    SELECT email_verification_token, email_verification_token_expires_at
+    FROM users
+    WHERE id = $1;
+  `
+
+	err = s.db.QueryRowContext(ctx, query, userId).Scan(&token, &expiresAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", time.Time{}, nil // No token found
+		}
+		return "", time.Time{}, err // Propagate the error
+	}
+
+	return token, expiresAt, nil
+}
+
+func (s *UserStore) VerifyUserEmail(ctx context.Context, userId int64) error {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	query := `
+  UPDATE users
+  SET email_verified = TRUE, email_verification_token = NULL, email_verification_token_expires_at = NULL
+  WHERE id = $1;
+  `
+	_, err := s.db.ExecContext(ctx, query, userId)
+	if err != nil {
+		log.Printf("Error verifying user email for user ID %d: %v", userId, err)
+		return err
+	}
+
+	return nil
+}

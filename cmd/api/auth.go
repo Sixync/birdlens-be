@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/sixync/birdlens-be/auth"
@@ -115,11 +117,50 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 
 	ctx := r.Context()
 
-	customerToken, err := app.authService.Register(ctx, req)
+	valid, msg, err := app.validRegisterUserReq(ctx, req)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	if !valid {
+		log.Println("invalid register user req with valid", valid, "and msg", msg)
+		app.badRequest(w, r, errors.New(msg))
+		return
+	}
+
+	log.Println("valid register user req with valid", valid, "and msg", msg)
+
+	customerToken, userId, err := app.authService.Register(ctx, req)
 	if err != nil {
 		app.badRequest(w, r, err)
 		return
 	}
+
+	// send verification email
+	// create token
+	emailToken, err := app.tokenMaker.CreateRandomToken()
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	duration := time.Duration(app.config.emailVerificationExpiresInHours) * time.Hour
+	expiresAt := time.Now().Add(duration)
+
+	app.store.Users.AddEmailVerificationToken(ctx, userId, emailToken, expiresAt)
+
+	// store email token in the database
+
+	links := url.Values{
+		"token":   []string{emailToken},
+		"user_id": []string{strconv.FormatInt(userId, 10)},
+	}
+	activationURL := app.config.frontEndUrl + "/auth/confirm-email?" + links.Encode()
+
+	log.Println("activationURL", activationURL)
+
+	sendVerificationEmail(req.Email, req.Username, activationURL)
 
 	response.JSON(w, http.StatusCreated, customerToken, false, "register successfully")
 }
@@ -209,8 +250,124 @@ func (app *application) handleUserSession(ctx context.Context, user *store.User,
 	return nil
 }
 
+func (app *application) verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Get the token from the query parameters
+	token := r.URL.Query().Get("token")
+	userIdStr := r.URL.Query().Get("user_id")
+	if token == "" {
+		app.badRequest(w, r, errors.New("missing token"))
+		return
+	}
+
+	if userIdStr == "" {
+		app.badRequest(w, r, errors.New("missing user_id"))
+		return
+	}
+
+	userIdInt, err := strconv.ParseInt(userIdStr, 10, 64)
+	if err != nil {
+		app.badRequest(w, r, errors.New("invalid user_id"))
+		return
+	}
+
+	// Verify the token
+	storedToken, expiresAt, err := app.store.Users.GetEmailVerificationToken(ctx, userIdInt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Println("no email verification token found for user", userIdInt)
+			app.badRequest(w, r, errors.New("invalid or expired token"))
+			return
+		}
+		app.serverError(w, r, err)
+		return
+	}
+
+	if storedToken != token || time.Now().After(expiresAt) {
+		log.Println("stoked token is equal to token", storedToken == token, "and now is after expires", time.Now().After(expiresAt))
+		log.Println("storedToken", storedToken, "token", token, "expiresAt", expiresAt, "time.Now()", time.Now())
+		app.badRequest(w, r, errors.New("invalid or expired token"))
+		return
+	}
+
+	if storedToken != token {
+		app.badRequest(w, r, errors.New("invalid token"))
+		return
+	}
+
+	// Update the user's email verification status
+	err = app.store.Users.VerifyUserEmail(ctx, userIdInt)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, nil, false, "email verified successfully")
+}
+
+// func (app *application) resendEmailVerificationHandler(w http.ResponseWriter, r *http.Request) {
+// 	ctx := r.Context()
+//
+// 	// Get the user ID from the query parameters
+// 	userIdStr := r.URL.Query().Get("user_id")
+// 	if userIdStr == "" {
+// 		app.badRequest(w, r, errors.New("missing user_id"))
+// 		return
+// 	}
+//
+// 	userIdInt, err := strconv.ParseInt(userIdStr, 10, 64)
+// 	if err != nil {
+// 		app.badRequest(w, r, errors.New("invalid user_id"))
+// 		return
+// 	}
+//
+// 	// Get the user by ID
+// 	user, err := app.store.Users.GetById(ctx, userIdInt)
+// 	if err != nil {
+// 		if errors.Is(err, sql.ErrNoRows) {
+// 			app.notFound(w, r)
+// 			return
+// 		}
+// 		app.serverError(w, r, err)
+// 		return
+// 	}
+//
+// 	if user.EmailVerified {
+// 		app.badRequest(w, r, errors.New("email already verified"))
+// 		return
+// 	}
+//
+// 	// Create a new email verification token
+// 	emailToken, err := app.tokenMaker.CreateRandomToken()
+// 	if err != nil {
+// 		app.serverError(w, r, err)
+// 		return
+// 	}
+//
+// 	expiresAt := time.Now().Add(24 * time.Hour) // Token valid for 24 hours
+//
+// 	err = app.store.Users.AddEmailVerificationToken(ctx, user.Id, emailToken, expiresAt)
+// 	if err != nil {
+// 		app.serverError(w, r, err)
+// 		return
+// 	}
+//
+// 	log.Println("Email verification token created for user", user.Username)
+//
+// 	activationURL := app.config.frontEndUrl + "/auth/confirm-email?token=" + emailToken + "&user_id=" + userIdStr
+// 	err = sendVerificationEmail(user.Email, user.Username, activationURL)
+// 	if err != nil {
+// 		app.serverError(w, r, err)
+// 		return
+// 	}
+//
+// 	response.JSON(w, http.StatusOK, nil, false, "verification email resent successfully")
+// }
+
 func (app *application) validRegisterUserReq(ctx context.Context, req auth.RegisterUserReq) (exists bool, msg string, err error) {
 	con1, err := app.store.Users.EmailExists(ctx, req.Email)
+	// case exists
 	if con1 {
 		msg += "email already exists\n"
 	}
@@ -219,6 +376,7 @@ func (app *application) validRegisterUserReq(ctx context.Context, req auth.Regis
 	}
 
 	con2, err := app.store.Users.UsernameExists(ctx, req.Username)
+	// case exists
 	if con2 {
 		msg += "username already exists\n"
 	}
@@ -226,5 +384,25 @@ func (app *application) validRegisterUserReq(ctx context.Context, req auth.Regis
 		return false, msg, err
 	}
 
-	return con1 || con2, msg, nil
+	return (!con1 || !con2), msg, nil
+}
+
+func sendVerificationEmail(recipient, username, activationURL string) error {
+	// create email job
+	data := struct {
+		Username      string
+		ActivationURL string
+	}{
+		Username:      username,
+		ActivationURL: activationURL,
+	}
+
+	log.Println("sent email job with data", data)
+	JobQueue <- EmailJob{
+		Recipient: recipient,
+		Data:      data,
+		Patterns:  []string{"user_welcome.tmpl"},
+	}
+
+	return nil
 }

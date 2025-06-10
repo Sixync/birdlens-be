@@ -42,6 +42,7 @@ func (app *application) routes() http.Handler {
 		r.Post("/login", app.loginHandler)
 		r.Post("/register", app.registerHandler)
 		r.Post("/refresh_token", app.refreshTokenHandler)
+		r.Patch("/email-verification", app.verifyEmailHandler)
 	})
 
 	mux.Route("/tours", func(r chi.Router) {

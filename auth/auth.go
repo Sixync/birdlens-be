@@ -71,11 +71,11 @@ func (s *AuthService) Login(ctx context.Context,
 }
 
 // Register creates a new user with the provided credentials and returns token
-func (s *AuthService) Register(ctx context.Context, req RegisterUserReq) (string, error) {
+func (s *AuthService) Register(ctx context.Context, req RegisterUserReq) (string, int64, error) {
 	// Generate a hash of the user's password using bcrypt
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 
 	// Create a new user in the database
@@ -103,10 +103,10 @@ func (s *AuthService) Register(ctx context.Context, req RegisterUserReq) (string
 	customToken, err := s.FireAuth.CustomToken(ctx, *user.FirebaseUID)
 	if err != nil {
 		log.Printf("failed to create custom token for user: %v", err)
-		return "", errors.New("internal server error")
+		return "", 0, errors.New("internal server error")
 	}
 
-	return customToken, nil
+	return customToken, user.Id, nil
 }
 
 func (req *RegisterUserReq) toUser() *store.User {
