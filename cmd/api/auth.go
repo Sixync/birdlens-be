@@ -391,7 +391,7 @@ func (app *application) validRegisterUserReq(ctx context.Context, req auth.Regis
 		return false, msg, err
 	}
 
-	return (!con1 || !con2), msg, nil
+	return (!con1 && !con2), msg, nil
 }
 
 func sendVerificationEmail(recipient, username, activationURL string) error {
