@@ -1,9 +1,12 @@
+// birdlens-be/cmd/api/auth.go
 package main
 
 import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"net/url"
@@ -70,7 +73,7 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, auth.ErrMailNotVerified):
 			log.Println("user email not verified")
-			app.badRequest(w, r, errors.New("email not verified"))
+			app.badRequest(w, r, errors.New("email not verified, please check your inbox for a verification link"))
 		default:
 			log.Println("error logging in user with email", req.Email, "and error", err)
 			app.serverError(w, r, err)
@@ -78,32 +81,6 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// generate jwt
-	// durationMin := app.config.jwt.accessTokenExpDurationMin
-	// token, userClaims, err := app.tokenMaker.CreateToken(user.Id, user.Username, durationMin)
-	// if err != nil {
-	// 	app.serverError(w, r, err)
-	// 	return
-	// }
-
-	// create and store refresh token
-
-	// refreshToken, err := app.tokenMaker.CreateRefreshToken()
-	// if err != nil {
-	// 	app.serverError(w, r, err)
-	// 	return
-	// }
-	// log.Println("pass create refresh token with token", refreshToken)
-	//
-	// refreshTokenDuration := app.config.jwt.refreshTokenExpDurationDay
-	// refreshTokenExp := time.Now().Add(time.Hour * 24 * time.Duration(refreshTokenDuration))
-	//
-	// err = app.handleUserSession(ctx, user, refreshToken, refreshTokenExp)
-	// if err != nil {
-	// 	app.serverError(w, r, err)
-	// 	return
-	// }
-	//
 	log.Println("pass create session with result", customToken)
 
 	response.JSON(w, http.StatusOK, customToken, false, "login successful")
@@ -163,13 +140,15 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 		"token":   []string{emailToken},
 		"user_id": []string{strconv.FormatInt(userId, 10)},
 	}
-	activationURL := app.config.frontEndUrl + "/auth/confirm-email?" + links.Encode()
+	// Use app.config.baseURL which should be the public URL of the backend (e.g., http://localhost)
+	// The path will be /auth/verify-email as defined in routes.go
+	activationURL := app.config.baseURL + "/auth/verify-email?" + links.Encode()
 
 	log.Println("activationURL", activationURL)
 
 	sendVerificationEmail(req.Email, req.Username, activationURL)
 
-	response.JSON(w, http.StatusCreated, customerToken, false, "register successfully")
+	response.JSON(w, http.StatusCreated, customerToken, false, "register successfully, please check your email to verify your account")
 }
 
 func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Request) {
@@ -257,120 +236,120 @@ func (app *application) handleUserSession(ctx context.Context, user *store.User,
 	return nil
 }
 
+const verificationSuccessHTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verified</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f4f4f4; text-align: center; }
+        .container { padding: 20px; background-color: white; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1 { color: #4CAF50; }
+        p { color: #333; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Email Verified Successfully!</h1>
+        <p>Your email address has been successfully verified. You can now close this window and log in to the Birdlens app.</p>
+    </div>
+</body>
+</html>
+`
+
+const verificationFailedHTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verification Failed</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f4f4f4; text-align: center; }
+        .container { padding: 20px; background-color: white; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1 { color: #F44336; }
+        p { color: #333; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Email Verification Failed</h1>
+        <p>%s</p>
+        <p>Please try registering again or contact support if the issue persists.</p>
+    </div>
+</body>
+</html>
+`
+
+// verifyEmailHandler will now be a GET request and respond with HTML.
 func (app *application) verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Get the token from the query parameters
 	token := r.URL.Query().Get("token")
 	userIdStr := r.URL.Query().Get("user_id")
-	if token == "" {
-		app.badRequest(w, r, errors.New("missing token"))
-		return
-	}
 
-	if userIdStr == "" {
-		app.badRequest(w, r, errors.New("missing user_id"))
+	if token == "" || userIdStr == "" {
+		log.Println("verifyEmailHandler: missing token or user_id")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, verificationFailedHTML, "Missing token or user ID in verification link.")
 		return
 	}
 
 	userIdInt, err := strconv.ParseInt(userIdStr, 10, 64)
 	if err != nil {
-		app.badRequest(w, r, errors.New("invalid user_id"))
+		log.Printf("verifyEmailHandler: invalid user_id format: %s", userIdStr)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, verificationFailedHTML, "Invalid user ID format.")
 		return
 	}
 
 	// Verify the token
 	storedToken, expiresAt, err := app.store.Users.GetEmailVerificationToken(ctx, userIdInt)
 	if err != nil {
+		log.Printf("verifyEmailHandler: error getting token for user %d: %v", userIdInt, err)
+		errMsg := "Invalid or expired verification link."
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Println("no email verification token found for user", userIdInt)
-			app.badRequest(w, r, errors.New("invalid or expired token"))
-			return
+		} else {
+			// For other DB errors, don't expose details to user
+			// app.serverError(w, r, err) // This sends JSON, we want HTML
 		}
-		app.serverError(w, r, err)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest) // Or StatusNotFound
+		fmt.Fprintf(w, verificationFailedHTML, errMsg)
 		return
 	}
 
 	if storedToken != token || time.Now().After(expiresAt) {
-		log.Println("stoked token is equal to token", storedToken == token, "and now is after expires", time.Now().After(expiresAt))
-		log.Println("storedToken", storedToken, "token", token, "expiresAt", expiresAt, "time.Now()", time.Now())
-		app.badRequest(w, r, errors.New("invalid or expired token"))
-		return
-	}
-
-	if storedToken != token {
-		app.badRequest(w, r, errors.New("invalid token"))
+		log.Printf("verifyEmailHandler: token mismatch or expired. Stored: %s, Received: %s, Expires: %v, Now: %v", storedToken, token, expiresAt, time.Now())
+		errMsg := "Verification link is invalid or has expired."
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, verificationFailedHTML, errMsg)
 		return
 	}
 
 	// Update the user's email verification status
 	err = app.store.Users.VerifyUserEmail(ctx, userIdInt)
 	if err != nil {
-		app.serverError(w, r, err)
+		log.Printf("verifyEmailHandler: error updating user email verification status for user %d: %v", userIdInt, err)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, verificationFailedHTML, "An error occurred while verifying your email. Please try again.")
 		return
 	}
 
-	response.JSON(w, http.StatusOK, nil, false, "email verified successfully")
+	log.Printf("verifyEmailHandler: email verified successfully for user %d", userIdInt)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, verificationSuccessHTML)
 }
 
-// func (app *application) resendEmailVerificationHandler(w http.ResponseWriter, r *http.Request) {
-// 	ctx := r.Context()
-//
-// 	// Get the user ID from the query parameters
-// 	userIdStr := r.URL.Query().Get("user_id")
-// 	if userIdStr == "" {
-// 		app.badRequest(w, r, errors.New("missing user_id"))
-// 		return
-// 	}
-//
-// 	userIdInt, err := strconv.ParseInt(userIdStr, 10, 64)
-// 	if err != nil {
-// 		app.badRequest(w, r, errors.New("invalid user_id"))
-// 		return
-// 	}
-//
-// 	// Get the user by ID
-// 	user, err := app.store.Users.GetById(ctx, userIdInt)
-// 	if err != nil {
-// 		if errors.Is(err, sql.ErrNoRows) {
-// 			app.notFound(w, r)
-// 			return
-// 		}
-// 		app.serverError(w, r, err)
-// 		return
-// 	}
-//
-// 	if user.EmailVerified {
-// 		app.badRequest(w, r, errors.New("email already verified"))
-// 		return
-// 	}
-//
-// 	// Create a new email verification token
-// 	emailToken, err := app.tokenMaker.CreateRandomToken()
-// 	if err != nil {
-// 		app.serverError(w, r, err)
-// 		return
-// 	}
-//
-// 	expiresAt := time.Now().Add(24 * time.Hour) // Token valid for 24 hours
-//
-// 	err = app.store.Users.AddEmailVerificationToken(ctx, user.Id, emailToken, expiresAt)
-// 	if err != nil {
-// 		app.serverError(w, r, err)
-// 		return
-// 	}
-//
-// 	log.Println("Email verification token created for user", user.Username)
-//
-// 	activationURL := app.config.frontEndUrl + "/auth/confirm-email?token=" + emailToken + "&user_id=" + userIdStr
-// 	err = sendVerificationEmail(user.Email, user.Username, activationURL)
-// 	if err != nil {
-// 		app.serverError(w, r, err)
-// 		return
-// 	}
-//
-// 	response.JSON(w, http.StatusOK, nil, false, "verification email resent successfully")
-// }
 
 func (app *application) validRegisterUserReq(ctx context.Context, req auth.RegisterUserReq) (exists bool, msg string, err error) {
 	con1, err := app.store.Users.EmailExists(ctx, req.Email)
@@ -412,4 +391,13 @@ func sendVerificationEmail(recipient, username, activationURL string) error {
 	}
 
 	return nil
+}
+
+// Template for parsing HTML responses directly from handler
+var htmlTmpl = template.Must(template.New("messagePage").Parse(`
+<!DOCTYPE html><html><head><title>{{.Title}}</title></head><body><h1>{{.Title}}</h1><p>{{.Message}}</p></body></html>`))
+
+type HtmlPageData struct {
+	Title   string
+	Message string
 }

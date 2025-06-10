@@ -27,9 +27,18 @@ services:
       DB_ADDR: postgres://${DB_USER}:${DB_PASSWORD}@birdlens-db:5432/birdlens?sslmode=disable
       HTTP_PORT: 6969
       ENV: "dev"
-      ACCESS_TOKEN_EXP_MIN: 10
-      REFRESH_TOKEN_EXP_DAY: 14
+      ACCESS_TOKEN_EXP_MIN: 10 
+      REFRESH_TOKEN_EXP_DAY: 14 
       PATH_TO_FIREBASE_CREDS: /env/birdlens-creds.json
+      BASE_URL: "http://localhost"
+      EMAIL_VERIFICATION_EXPIRES_IN_HOURS: ${EMAIL_VERIFICATION_EXPIRES_IN_HOURS:-24}
+      # And FRONTEND_URL, though not used for this specific feature, is read by main.go
+      FRONTEND_URL: ${FRONTEND_URL:-"birdlens://deeplink"}
+      # JWT_SECRET_KEY, SMTP variables will be loaded by the Go app from /env/mail.env and /env/.env if present there.
+      # If not, and if critical, they should be explicitly set here or ensure the .env files in the image are correct.
+      # Example: JWT_SECRET_KEY: ${JWT_SECRET_KEY:?"JWT_SECRET_KEY must be set in .env or here"}
+
+
     deploy:
       mode: replicated
       replicas: 3
@@ -48,9 +57,8 @@ services:
         "postgres://${DB_USER}:${DB_PASSWORD}@birdlens-db:5432/birdlens?sslmode=disable",
         "up",
       ]
-    depends_on:
+    depends_on: 
       - birdlens-db
-      - birdlens-be
     networks:
       - birdlens-network
 
@@ -79,7 +87,7 @@ services:
     environment:
       MP_SMTP_TLS_CERT: /env/cert.pem
       MP_SMTP_TLS_KEY: /env/key.pem
-      MP_SMTP_REQUIRE_TLS: false
+      MP_SMTP_REQUIRE_TLS: "false"
     networks:
       - birdlens-network
     volumes:

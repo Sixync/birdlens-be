@@ -1,3 +1,4 @@
+// birdlens-be/internal/store/users.go
 package store
 
 import (
@@ -34,7 +35,6 @@ type UserStore struct {
 	db *sqlx.DB
 }
 
-// Create inserts a new user into the database
 func (s *UserStore) Create(ctx context.Context, user *User) error {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
@@ -42,12 +42,12 @@ func (s *UserStore) Create(ctx context.Context, user *User) error {
 	query := `
 		INSERT INTO users (
 			username, age, first_name, last_name, 
-			email, hashed_password, avatar_url, firebase_uid, auth_provider
+			email, hashed_password, avatar_url, firebase_uid, auth_provider, email_verified
 		) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9 
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 		) RETURNING id, created_at`
-
-	err := s.db.QueryRowContext(ctx, query, user.Username, user.Age, user.FirstName, user.LastName, user.Email, user.HashedPassword, user.AvatarUrl, user.FirebaseUID, user.AuthProvider).Scan(&user.Id, &user.CreatedAt)
+    // Ensure email_verified is set to false by default during creation by the service layer if not explicitly passed
+	err := s.db.QueryRowContext(ctx, query, user.Username, user.Age, user.FirstName, user.LastName, user.Email, user.HashedPassword, user.AvatarUrl, user.FirebaseUID, user.AuthProvider, user.EmailVerified).Scan(&user.Id, &user.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,6 @@ func (s *UserStore) Create(ctx context.Context, user *User) error {
 	return nil
 }
 
-// Update modifies an existing user in the database
 func (s *UserStore) Update(ctx context.Context, user *User) error {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
@@ -69,81 +68,70 @@ func (s *UserStore) Update(ctx context.Context, user *User) error {
 			last_name = :last_name,
 			email = :email,
 			hashed_password = :hashed_password,
-			updated_at = :updated_at
+            avatar_url = :avatar_url,
+            email_verified = :email_verified,
+			updated_at = NOW()
 		WHERE id = :id`
 
 	_, err := s.db.NamedExecContext(ctx, query, user)
 	return err
 }
 
-// Delete removes a user from the database by ID
 func (s *UserStore) Delete(ctx context.Context, id int64) error {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
-	query := `DELETE FROM users WHERE id = ?`
+	query := `DELETE FROM users WHERE id = $1`
 	_, err := s.db.ExecContext(ctx, query, id)
 	return err
 }
 
-// Get retrieves a user by ID
 func (s *UserStore) GetById(ctx context.Context, id int64) (*User, error) {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
 	var user User
+	// Ensure all fields including email_verified are selected
 	query := `
-  SELECT username, age, first_name, last_name, email, hashed_password, avatar_url, created_at, updated_at
+  SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at
   FROM users WHERE id = $1;
   `
-	err := s.db.QueryRowContext(ctx, query, id).Scan(&user.Username, &user.Age, &user.FirstName, &user.LastName, &user.Email, &user.HashedPassword, &user.AvatarUrl, &user.CreatedAt, &user.UpdatedAt)
+	err := s.db.GetContext(ctx, &user, query, id) // sqlx.GetContext handles mapping to struct fields
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil // Or your custom not found error
+		}
 		return nil, err
 	}
 	return &user, nil
 }
 
-// GetByUsername retrieves a user by username
 func (s *UserStore) GetByUsername(ctx context.Context, username string) (*User, error) {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
 	var user User
-	query := `SELECT id, username, age, first_name, last_name, email, hashed_password, created_at, updated_at, avatar_url, email_verified
+	query := `SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at
   FROM users WHERE username = $1`
 
-	err := s.db.QueryRowContext(ctx, query, username).Scan(
-		&user.Id,
-		&user.Username,
-		&user.Age,
-		&user.FirstName,
-		&user.LastName,
-		&user.Email,
-		&user.HashedPassword,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-		&user.AvatarUrl,
-		&user.EmailVerified,
-	)
+	err := s.db.GetContext(ctx, &user, query, username)
 	if err != nil {
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("user not found: %w", err)
-		default:
-			return nil, err
 		}
+		return nil, err
 	}
 	return &user, nil
 }
 
-// GetByEmail retrieves a user by email
 func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error) {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
 	var user User
 	query := `
-    SELECT * FROM users
+    SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at
+    FROM users
     WHERE email = $1
   `
 
@@ -157,32 +145,24 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 	return &user, nil
 }
 
-// create check exist user
 func (s *UserStore) UsernameExists(ctx context.Context, username string) (bool, error) {
 	query := `SELECT EXISTS(SELECT 1 FROM users WHERE username = $1);`
 	var exists bool
-
 	err := s.db.QueryRowContext(ctx, query, username).Scan(&exists)
 	if err != nil {
-		// sql.ErrNoRows should generally not happen here because EXISTS always returns one row
-		// with a boolean value. If it does, it's an unexpected DB or driver behavior.
-		log.Printf("Error checking if email '%s' exists: %v", username, err)
-		return false, err // Propagate the actual db error
+		log.Printf("Error checking if username '%s' exists: %v", username, err)
+		return false, err
 	}
 	return exists, nil
 }
 
-// create check exist user email
 func (s *UserStore) EmailExists(ctx context.Context, email string) (bool, error) {
 	query := `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1);`
 	var exists bool
-
 	err := s.db.QueryRowContext(ctx, query, email).Scan(&exists)
 	if err != nil {
-		// sql.ErrNoRows should generally not happen here because EXISTS always returns one row
-		// with a boolean value. If it does, it's an unexpected DB or driver behavior.
 		log.Printf("Error checking if email '%s' exists: %v", email, err)
-		return false, err // Propagate the actual db error
+		return false, err
 	}
 	return exists, nil
 }
@@ -192,7 +172,9 @@ func (s *UserStore) GetByFirebaseUID(ctx context.Context, firebaseUID string) (*
 	defer cancel()
 
 	var user User
-	query := `SELECT * FROM users WHERE firebase_uid = $1`
+	// Ensure all fields including email_verified are selected
+	query := `SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at
+    FROM users WHERE firebase_uid = $1`
 	err := s.db.GetContext(ctx, &user, query, firebaseUID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -225,19 +207,28 @@ func (s *UserStore) GetEmailVerificationToken(ctx context.Context, userId int64)
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
+	var dbToken sql.NullString
+	var dbExpiresAt sql.NullTime
+
 	query := `
     SELECT email_verification_token, email_verification_token_expires_at
     FROM users
     WHERE id = $1;
   `
 
-	err = s.db.QueryRowContext(ctx, query, userId).Scan(&token, &expiresAt)
+	err = s.db.QueryRowContext(ctx, query, userId).Scan(&dbToken, &dbExpiresAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", time.Time{}, nil // No token found
+			return "", time.Time{}, nil 
 		}
-		return "", time.Time{}, err // Propagate the error
+		return "", time.Time{}, err 
 	}
+    if dbToken.Valid {
+        token = dbToken.String
+    }
+    if dbExpiresAt.Valid {
+        expiresAt = dbExpiresAt.Time
+    }
 
 	return token, expiresAt, nil
 }

@@ -1,3 +1,4 @@
+// birdlens-be/cmd/api/users.go
 package main
 
 import (
@@ -47,13 +48,14 @@ type CreateUserReq struct {
 }
 
 type UserResponse struct {
-	Username     string  `json:"username"`
-	FirstName    string  `json:"first_name"`
-	LastName     string  `json:"last_name"`
-	Email        string  `json:"email"`
-	Age          int     `json:"age"`
-	AvatarUrl    *string `json:"avatar_url"`
-	Subscription string  `json:"subscription,omitempty"`
+	Username      string  `json:"username"`
+	FirstName     string  `json:"first_name"`
+	LastName      string  `json:"last_name"`
+	Email         string  `json:"email"`
+	Age           int     `json:"age"`
+	AvatarUrl     *string `json:"avatar_url"`
+	Subscription  string  `json:"subscription,omitempty"`
+	EmailVerified bool    `json:"email_verified"` // Added this field
 }
 
 func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +67,6 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 
 	ctx := r.Context()
 
-	// Hash the password
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
 		app.serverError(w, r, err)
@@ -87,6 +88,9 @@ func (app *application) createUserHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Note: The createUserHandler currently returns the store.User object directly.
+	// If it were to return UserResponse, EmailVerified would need to be populated here too.
+	// However, this endpoint is less critical for this specific flow than /users/me.
 	if err := response.JSON(w, http.StatusCreated, user, false, "create successful"); err != nil {
 		app.serverError(w, r, err)
 	}
@@ -98,30 +102,28 @@ func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
 		app.serverError(w, r, err)
 		return
 	}
-
+	// This handler would also need to be updated if it were to return UserResponse
+	// to include the EmailVerified field from the store.User.
 	if err := response.JSON(w, http.StatusOK, user, false, "get successful"); err != nil {
 		app.serverError(w, r, err)
 	}
 }
 
 func (app *application) getCurrentUserProfileHandler(w http.ResponseWriter, r *http.Request) {
-	user := app.getUserFromFirebaseClaimsCtx(r)
+	userFromClaims := app.getUserFromFirebaseClaimsCtx(r) // This fetches user from DB based on Firebase UID
 
-	log.Println("getCurrentUserProfileHandler user:", user)
+	log.Println("getCurrentUserProfileHandler user from claims context (includes DB data):", userFromClaims)
 
-	if user == nil {
+	if userFromClaims == nil {
 		app.unauthorized(w, r)
 		return
 	}
 	ctx := r.Context()
 
-	profile, err := app.store.Users.GetById(ctx, user.Id)
-	if err != nil {
-		app.serverError(w, r, err)
-		return
-	}
+	// The userFromClaims already contains the EmailVerified status from the database
+	// because getUserFromFirebaseClaimsCtx calls store.Users.GetByFirebaseUID which selects all fields.
 
-	subscription, err := app.store.Subscriptions.GetUserSubscriptionByEmail(ctx, profile.Email)
+	subscription, err := app.store.Subscriptions.GetUserSubscriptionByEmail(ctx, userFromClaims.Email)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		app.serverError(w, r, err)
 		return
@@ -130,13 +132,14 @@ func (app *application) getCurrentUserProfileHandler(w http.ResponseWriter, r *h
 	log.Printf("get user sub: %+v", subscription)
 
 	res := &UserResponse{
-		Username:     profile.Username,
-		FirstName:    profile.FirstName,
-		LastName:     profile.LastName,
-		Email:        profile.Email,
-		Age:          profile.Age,
-		AvatarUrl:    profile.AvatarUrl,
-		Subscription: "",
+		Username:      userFromClaims.Username,
+		FirstName:     userFromClaims.FirstName,
+		LastName:      userFromClaims.LastName,
+		Email:         userFromClaims.Email,
+		Age:           userFromClaims.Age,
+		AvatarUrl:     userFromClaims.AvatarUrl,
+		Subscription:  "",
+		EmailVerified: userFromClaims.EmailVerified, // Populate the new field
 	}
 
 	if subscription != nil {
@@ -168,7 +171,7 @@ func (app *application) getUserMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		user, err := app.store.Users.GetById(r.Context(), userIdInt)
+		user, err := app.store.Users.GetById(r.Context(), userIdInt) // GetById needs to select EmailVerified
 		if err != nil {
 			app.serverError(w, r, err)
 			return
@@ -182,8 +185,6 @@ func (app *application) getUserMiddleware(next http.Handler) http.Handler {
 func (app *application) getUserFromFirebaseClaimsCtx(r *http.Request) *store.User {
 	claims, ok := r.Context().Value(UserClaimsKey).(*jwt.FirebaseClaims)
 	if !ok {
-		// This should not happen if middleware is correctly applied
-		// and always sets the claims. Could panic or log an error.
 		return nil
 	}
 	if claims == nil {
@@ -194,6 +195,7 @@ func (app *application) getUserFromFirebaseClaimsCtx(r *http.Request) *store.Use
 	log.Println("getUserFromFirebaseClaimsCtx claims:", claims)
 
 	ctx := r.Context()
+	// GetByFirebaseUID should select all necessary fields including EmailVerified
 	user, err := app.store.Users.GetByFirebaseUID(ctx, claims.Uid)
 	if err != nil {
 		log.Printf("failed to get user by Firebase UID %s: %v", claims.Uid, err)

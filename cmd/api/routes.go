@@ -1,3 +1,4 @@
+// birdlens-be/cmd/api/routes.go
 package main
 
 import (
@@ -42,11 +43,11 @@ func (app *application) routes() http.Handler {
 		r.Post("/login", app.loginHandler)
 		r.Post("/register", app.registerHandler)
 		r.Post("/refresh_token", app.refreshTokenHandler)
-		r.Patch("/email-verification", app.verifyEmailHandler)
+		// Changed from PATCH to GET and updated path for clarity (optional path change)
+		r.Get("/verify-email", app.verifyEmailHandler)
 	})
 
 	mux.Route("/tours", func(r chi.Router) {
-		// TODO: Add authentication middleware later
 		r.With(app.paginate).Get("/", app.getToursHandler)
 		r.With(app.getTourMiddleware).Get("/{tour_id}", app.getTourHandler)
 		r.Post("/", app.createTourHandler)
@@ -56,30 +57,17 @@ func (app *application) routes() http.Handler {
 
 	// subscriptions
 	mux.Route("/subscriptions", func(r chi.Router) {
-		// TODO: Add authentication middleware later
 		r.Get("/", app.getSubscriptionsHandler)
 		r.Post("/", app.createSubscriptionHandler)
-		// TODO: This one
-		// r.Put("/{user_id}/subscribe", app.subscribeUserHandler)
 	})
 
 	// events
 	mux.Route("/events", func(r chi.Router) {
-		// TODO: Add authentication middleware later
 		r.With(app.paginate).Get("/", app.getEventsHandler)
 		r.Post("/", app.createEventHandler)
 		r.With(app.getEventMiddleware).Get("/{event_id}", app.getEventHandler)
 		r.With(app.getEventMiddleware).Delete("/{event_id}", app.deleteEventHandler)
 	})
-
-	// bookmarks
-	// mux.Route("/events", func(r chi.Router) {
-	// 	// TODO: Add authentication middleware later
-	// 	r.With(app.paginate).Get("/", app.getEventsHandler)
-	// 	r.Post("/", app.createEventHandler)
-	// 	r.With(app.getEventMiddleware).Get("/{event_id}", app.getEventHandler)
-	// 	r.With(app.getEventMiddleware).Delete("/{event_id}", app.deleteEventHandler)
-	// })
 
 	return mux
 }
