@@ -22,6 +22,9 @@ type Storage struct {
 		UsernameExists(ctx context.Context, username string) (bool, error)
 		EmailExists(ctx context.Context, username string) (bool, error)
 		GetByFirebaseUID(ctx context.Context, firebaseUID string) (*User, error)
+		AddEmailVerificationToken(ctx context.Context, userId int64, token string, expiresAt time.Time) error
+		GetEmailVerificationToken(ctx context.Context, userId int64) (token string, expiresAt time.Time, err error)
+		VerifyUserEmail(ctx context.Context, userId int64) error
 	}
 	Posts interface {
 		Create(context.Context, *Post) error

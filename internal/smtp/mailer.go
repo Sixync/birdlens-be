@@ -21,7 +21,14 @@ type Mailer struct {
 }
 
 func NewMailer(host string, port int, username, password, from string) (*Mailer, error) {
-	client, err := mail.NewClient(host, mail.WithTimeout(defaultTimeout), mail.WithSMTPAuth(mail.SMTPAuthLogin), mail.WithPort(port), mail.WithUsername(username), mail.WithPassword(password))
+	client, err := mail.NewClient(host,
+		mail.WithTimeout(defaultTimeout),
+		mail.WithPort(port),
+		mail.WithSMTPAuth(mail.SMTPAuthPlain),
+		mail.WithUsername(username),
+		mail.WithPassword(password),
+		mail.WithTLSPolicy(mail.TLSOpportunistic),
+	)
 	if err != nil {
 		return nil, err
 	}

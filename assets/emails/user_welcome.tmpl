@@ -1,0 +1,116 @@
+{{define "subject"}}Welcome to Birdlens! Please Confirm Your Email{{end}}
+
+{{define "plainBody"}}
+Hi {{.Username}},
+
+Welcome to Birdlens! We're thrilled to have you join our community of bird enthusiasts and photographers.
+
+To complete your registration and activate your account, please click the link below:
+
+{{.ActivationURL}}
+
+This link is valid for 24 hours.
+
+If you have trouble clicking the link, please copy and paste the full URL into your web browser.
+
+Thanks,
+The Birdlens Team
+{{end}}
+
+{{define "htmlBody"}}
+<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width" />
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <style>
+    body { font-family: sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; line-height: 1.4; }
+    .container { display: block; Margin: 0 auto !important; max-width: 580px; padding: 10px; width: 580px; }
+    .content { box-sizing: border-box; display: block; Margin: 0 auto; max-width: 580px; padding: 10px; }
+    .main { background: #ffffff; border-radius: 3px; width: 100%; }
+    .wrapper { box-sizing: border-box; padding: 20px; }
+    .btn { box-sizing: border-box; width: 100%; }
+    .btn > tbody > tr > td { padding-bottom: 15px; }
+    .btn table { width: auto; }
+    .btn table td {
+      background-color: #ffffff;
+      border-radius: 5px;
+      text-align: center;
+    }
+    .btn a {
+      background-color: #3498db; /* A nice blue color */
+      border: solid 1px #3498db;
+      border-radius: 5px;
+      box-sizing: border-box;
+      color: #ffffff;
+      cursor: pointer;
+      display: inline-block;
+      font-size: 14px;
+      font-weight: bold;
+      margin: 0;
+      padding: 12px 25px;
+      text-decoration: none;
+      text-transform: capitalize;
+    }
+  </style>
+</head>
+<body>
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" class="body">
+    <tr>
+      <td> </td>
+      <td class="container">
+        <div class="content">
+
+          <!-- START CENTERED WHITE CONTAINER -->
+          <table role="presentation" class="main">
+
+            <!-- START BANNER AREA -->
+            <tr>
+              <td style="padding-bottom: 20px;">
+                <!-- UPDATED BANNER IMAGE -->
+                <img src="https://res.cloudinary.com/dqsiu10rv/image/upload/v1749485709/WALLPAPER_1_gfap2b.png" 
+                     alt="Birdlens Banner" 
+                     style="width: 100%; max-width: 100%; height: auto; display: block; border-radius: 3px 3px 0 0;">
+              </td>
+            </tr>
+            <!-- END BANNER AREA -->
+                  <tr>
+                    <td>
+                      <h1 style="font-size: 24px; font-weight: bold; margin: 0; margin-bottom: 15px;">Welcome, {{.Username}}!</h1>
+                      <p>We're thrilled to have you join Birdlens, the best place to share and discover amazing bird photography.</p>
+                      <p>To get started, please confirm your email address by clicking the button below. This will activate your account.</p>
+                      <table role="presentation" border="0" cellpadding="0" cellspacing="0" class="btn">
+                        <tbody>
+                          <tr>
+                            <td align="left">
+                              <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                                <tbody>
+                                  <tr>
+                                    <td> <a href="{{.ActivationURL}}" target="_blank">Activate Your Account</a> </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <p>This confirmation link will expire in 24 hours.</p>
+                      <p>If the button above doesn't work, you can copy and paste this link into your browser:<br><a href="{{.ActivationURL}}">{{.ActivationURL}}</a></p>
+                      <p>Thanks,<br>The Birdlens Team</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          <!-- END MAIN CONTENT AREA -->
+          </table>
+
+        <!-- END CENTERED WHITE CONTAINER -->
+        </div>
+      </td>
+      <td> </td>
+    </tr>
+  </table>
+</body>
+</html>
+{{end}}

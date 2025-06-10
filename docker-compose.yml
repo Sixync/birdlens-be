@@ -24,7 +24,7 @@ services:
       - birdlens-db
     restart: always
     environment:
-      DB_ADDR: postgres://admin:password@birdlens-db:5432/birdlens?sslmode=disable
+      DB_ADDR: postgres://${DB_USER}:${DB_PASSWORD}@birdlens-db:5432/birdlens?sslmode=disable
       HTTP_PORT: 6969
       ENV: "dev"
       ACCESS_TOKEN_EXP_MIN: 10
@@ -68,9 +68,26 @@ services:
     restart: always
     networks:
       - birdlens-network
+
+  mailpit:
+    image: axllent/mailpit:v1.26
+    container_name: mock-mail
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    restart: unless-stopped
+    environment:
+      MP_SMTP_TLS_CERT: /env/cert.pem
+      MP_SMTP_TLS_KEY: /env/key.pem
+      MP_SMTP_REQUIRE_TLS: false
+    networks:
+      - birdlens-network
+    volumes:
+      - ./env:/env
+
 volumes:
   db-data:
 
 networks:
   birdlens-network:
-    driver: bridge
+    external: true
