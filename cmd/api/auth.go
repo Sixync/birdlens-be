@@ -67,7 +67,14 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	customToken, err := app.authService.Login(ctx, req.Email, req.Password, subParam)
 	if err != nil {
-		app.badRequest(w, r, err)
+		switch {
+		case errors.Is(err, auth.ErrMailNotVerified):
+			log.Println("user email not verified")
+			app.badRequest(w, r, errors.New("email not verified"))
+		default:
+			log.Println("error logging in user with email", req.Email, "and error", err)
+			app.serverError(w, r, err)
+		}
 		return
 	}
 

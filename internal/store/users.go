@@ -12,19 +12,22 @@ import (
 )
 
 type User struct {
-	Id             int64      `json:"id" db:"id"`
-	FirebaseUID    *string    `json:"-" db:"firebase_uid"`
-	SubscriptionId *string    `json:"-" db:"subscription_id"`
-	Username       string     `json:"username" db:"username"`
-	Age            int        `json:"age" db:"age"`
-	FirstName      string     `json:"first_name" db:"first_name"`
-	LastName       string     `json:"last_name" db:"last_name"`
-	Email          string     `json:"email" db:"email"`
-	HashedPassword *string    `json:"-" db:"hashed_password"`
-	AuthProvider   string     `json:"-" db:"auth_provider"`
-	AvatarUrl      *string    `json:"avatar_url" db:"avatar_url"`
-	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt      *time.Time `json:"updated_at" db:"updated_at"`
+	Id                              int64      `json:"id" db:"id"`
+	FirebaseUID                     *string    `json:"-" db:"firebase_uid"`
+	SubscriptionId                  *string    `json:"-" db:"subscription_id"`
+	Username                        string     `json:"username" db:"username"`
+	Age                             int        `json:"age" db:"age"`
+	FirstName                       string     `json:"first_name" db:"first_name"`
+	LastName                        string     `json:"last_name" db:"last_name"`
+	Email                           string     `json:"email" db:"email"`
+	HashedPassword                  *string    `json:"-" db:"hashed_password"`
+	AuthProvider                    string     `json:"-" db:"auth_provider"`
+	AvatarUrl                       *string    `json:"avatar_url" db:"avatar_url"`
+	CreatedAt                       time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt                       *time.Time `json:"updated_at" db:"updated_at"`
+	EmailVerified                   bool       `json:"email_verified" db:"email_verified"`
+	EmailVerificationToken          *string    `json:"-" db:"email_verification_token"`
+	EmailVerificationTokenExpiresAt *time.Time `json:"-" db:"email_verification_token_expires_at"`
 }
 
 type UserStore struct {
@@ -106,7 +109,7 @@ func (s *UserStore) GetByUsername(ctx context.Context, username string) (*User, 
 	defer cancel()
 
 	var user User
-	query := `SELECT id, username, age, first_name, last_name, email, hashed_password, created_at, updated_at, avatar_url
+	query := `SELECT id, username, age, first_name, last_name, email, hashed_password, created_at, updated_at, avatar_url, email_verified
   FROM users WHERE username = $1`
 
 	err := s.db.QueryRowContext(ctx, query, username).Scan(
@@ -120,6 +123,7 @@ func (s *UserStore) GetByUsername(ctx context.Context, username string) (*User, 
 		&user.CreatedAt,
 		&user.UpdatedAt,
 		&user.AvatarUrl,
+		&user.EmailVerified,
 	)
 	if err != nil {
 		switch {

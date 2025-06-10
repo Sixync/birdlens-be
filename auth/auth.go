@@ -11,6 +11,8 @@ import (
 	"github.com/sixync/birdlens-be/internal/utils"
 )
 
+var ErrMailNotVerified = errors.New("email not verified")
+
 type AuthService struct {
 	store    *store.Storage
 	FireAuth *auth.Client
@@ -47,6 +49,11 @@ func (s *AuthService) Login(ctx context.Context,
 	}
 
 	log.Printf("user found: %v", user)
+
+	if !user.EmailVerified {
+		log.Println("user email not verified")
+		return "", ErrMailNotVerified
+	}
 
 	// Check if the provided password matches the user's password
 	if matched := utils.CheckPasswordHash(password, *user.HashedPassword); !matched {
