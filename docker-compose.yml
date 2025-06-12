@@ -24,7 +24,7 @@ services:
       - birdlens-db
     restart: always
     env_file:
-      - ./env/.env # Loads variables from birdlens-be/env/.env
+      - ./env/.env 
     environment:
       DB_ADDR: postgres://${DB_USER}:${DB_PASSWORD}@birdlens-db:5432/birdlens?sslmode=disable
       HTTP_PORT: 6969
@@ -32,10 +32,10 @@ services:
       ACCESS_TOKEN_EXP_MIN: 10 
       REFRESH_TOKEN_EXP_DAY: 14 
       PATH_TO_FIREBASE_CREDS: /env/birdlens-creds.json
-      # BASE_URL, FRONTEND_URL, and EMAIL_VERIFICATION_EXPIRES_IN_HOURS will now be sourced from ./env/.env
+      
     deploy:
       mode: replicated
-      replicas: 3
+      replicas: 1 # MODIFIED FROM 3 to 1
     networks:
       - birdlens-network
 

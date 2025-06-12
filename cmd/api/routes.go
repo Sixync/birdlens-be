@@ -1,3 +1,4 @@
+// birdlens-be/cmd/api/routes.go
 package main
 
 import (
@@ -25,9 +26,8 @@ func (app *application) routes() http.Handler {
 	})
 
 	mux.Route("/comments", func(r chi.Router) {
-		r.With(app.authMiddleware).With(app.paginate).Get("/", app.getPostsHandler) // This seems like a copy-paste, should it be getCommentsHandler?
-		r.With(app.authMiddleware).Post("/", app.createPostHandler) // This also seems like a copy-paste
-		// The routes below are duplicates of /posts/{post_id}/...
+		r.With(app.authMiddleware).With(app.paginate).Get("/", app.getPostsHandler) 
+		r.With(app.authMiddleware).Post("/", app.createPostHandler) 
 		r.With(app.authMiddleware).With(app.getPostMiddleware).With(app.paginate).Get("/{post_id}/comments", app.getPostCommentsHandler)
 		r.With(app.authMiddleware).With(app.getPostMiddleware).Post("/{post_id}/reactions", app.addUserReactionHandler)
 		r.With(app.authMiddleware).With(app.getPostMiddleware).Post("/{post_id}/comments", app.createCommentHandler)
@@ -56,7 +56,8 @@ func (app *application) routes() http.Handler {
 
 	mux.Route("/subscriptions", func(r chi.Router) {
 		r.Get("/", app.getSubscriptionsHandler)
-		r.Post("/", app.createSubscriptionHandler)
+		// Creating subscriptions should likely be an admin-only or controlled operation
+		// r.Post("/", app.createSubscriptionHandler) 
 	})
 
 	mux.Route("/events", func(r chi.Router) {
@@ -66,8 +67,8 @@ func (app *application) routes() http.Handler {
 		r.With(app.getEventMiddleware).Delete("/{event_id}", app.deleteEventHandler)
 	})
 
-	// Stripe Payment Endpoint
-	mux.Post("/create-payment-intent", app.handleCreatePaymentIntent)
+	mux.With(app.authMiddleware).Post("/create-payment-intent", app.handleCreatePaymentIntent)
+	mux.Post("/stripe-webhooks", app.handleStripeWebhook) // New webhook route
 
 	return mux
 }

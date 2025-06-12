@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log"
 
@@ -12,6 +13,8 @@ import (
 )
 
 var ErrMailNotVerified = errors.New("email not verified")
+var ErrUserNotFound = errors.New("user not found")
+var ErrIncorrectPassword = errors.New("incorrect password")
 
 type AuthService struct {
 	store    *store.Storage
@@ -41,57 +44,71 @@ func (s *AuthService) Login(ctx context.Context,
 	password,
 	subscription string,
 ) (string, error) {
-	// Get the user from the database
 	log.Println("Attempting to login user with info:", email, password, subscription)
 	user, err := s.store.Users.GetByEmail(ctx, email)
 	if err != nil {
-		return "", err
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Println("user not found with email:", email)
+			return "", ErrUserNotFound 
+		}
+		log.Println("error getting user by email:", err)
+		return "", err 
 	}
 
-	log.Printf("user found: %v", user)
+	if user == nil {
+		log.Println("user is nil after GetByEmail, though no explicit error was returned. This indicates user not found for email:", email)
+		return "", ErrUserNotFound 
+	}
+
+
+	log.Printf("user found: %+v", user) 
 
 	if !user.EmailVerified {
-		log.Println("user email not verified")
+		log.Println("user email not verified for user:", user.Email)
 		return "", ErrMailNotVerified
 	}
 
-	// Check if the provided password matches the user's password
-	if matched := utils.CheckPasswordHash(password, *user.HashedPassword); !matched {
-		return "", errors.New("incorrect password")
+	if user.HashedPassword == nil {
+		log.Println("user has no hashed password set:", user.Email)
+		return "", errors.New("user account is not properly configured for password login")
 	}
 
-	// Generate a Firebase custom token for the user
+	if matched := utils.CheckPasswordHash(password, *user.HashedPassword); !matched {
+		log.Println("incorrect password for user:", user.Email)
+		return "", ErrIncorrectPassword
+	}
+
 	claims := map[string]any{
 		"username":     user.Username,
 		"subscription": subscription,
 	}
+    if user.FirebaseUID == nil || *user.FirebaseUID == "" {
+        log.Printf("User %s (ID: %d) is missing FirebaseUID. Cannot generate custom token.", user.Email, user.Id)
+        return "", errors.New("internal server error: user account configuration issue")
+    }
+
 
 	token, err := s.FireAuth.CustomTokenWithClaims(ctx, *user.FirebaseUID, claims)
 	if err != nil {
-		log.Printf("failed to generate custom token: %v", err)
-		return "", errors.New("internal server error")
+		log.Printf("failed to generate custom token for UID %s: %v", *user.FirebaseUID, err)
+		return "", errors.New("internal server error generating auth token")
 	}
 
-	log.Printf("generated custom token: %s", token)
+	log.Printf("generated custom token for UID %s", *user.FirebaseUID)
 
 	return token, nil
 }
 
-// Register creates a new user with the provided credentials and returns token
 func (s *AuthService) Register(ctx context.Context, req RegisterUserReq) (string, int64, error) {
-	// Generate a hash of the user's password using bcrypt
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
 		return "", 0, err
 	}
 
-	// Create a new user in the database
 	user := req.toUser()
 
 	uid := uuid.New().String()
-
 	user.FirebaseUID = &uid
-
 	log.Println("Creating user with Firebase UID:", *user.FirebaseUID)
 
 	user.HashedPassword = &hashedPassword
@@ -99,18 +116,22 @@ func (s *AuthService) Register(ctx context.Context, req RegisterUserReq) (string
 	if req.AuthProvider == "" {
 		req.AuthProvider = "firebase"
 	}
-
 	user.AuthProvider = req.AuthProvider
+	user.EmailVerified = false 
 
 	log.Println("user hashed password:", *user.HashedPassword)
 
-	s.store.Users.Create(ctx, user)
+	err = s.store.Users.Create(ctx, user) 
+	if err != nil {
+		log.Printf("failed to create user in database: %v", err)
+		return "", 0, errors.New("failed to register user")
+	}
 
-	// Create a custom token for the user using the Firebase Admin SDK
+
 	customToken, err := s.FireAuth.CustomToken(ctx, *user.FirebaseUID)
 	if err != nil {
-		log.Printf("failed to create custom token for user: %v", err)
-		return "", 0, errors.New("internal server error")
+		log.Printf("failed to create custom token for user %s (UID: %s): %v", user.Email, *user.FirebaseUID, err)
+		return "", 0, errors.New("internal server error creating auth token post-registration")
 	}
 
 	return customToken, user.Id, nil

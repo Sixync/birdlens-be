@@ -1,4 +1,3 @@
-// birdlens-be/internal/store/users.go
 package store
 
 import (
@@ -15,7 +14,7 @@ import (
 type User struct {
 	Id                              int64      `json:"id" db:"id"`
 	FirebaseUID                     *string    `json:"-" db:"firebase_uid"`
-	SubscriptionId                  *string    `json:"-" db:"subscription_id"`
+	SubscriptionId                  *int64     `json:"-" db:"subscription_id"` 
 	Username                        string     `json:"username" db:"username"`
 	Age                             int        `json:"age" db:"age"`
 	FirstName                       string     `json:"first_name" db:"first_name"`
@@ -29,6 +28,12 @@ type User struct {
 	EmailVerified                   bool       `json:"email_verified" db:"email_verified"`
 	EmailVerificationToken          *string    `json:"-" db:"email_verification_token"`
 	EmailVerificationTokenExpiresAt *time.Time `json:"-" db:"email_verification_token_expires_at"`
+
+	StripeCustomerID            *string    `json:"-" db:"stripe_customer_id"`
+	StripeSubscriptionID        *string    `json:"-" db:"stripe_subscription_id"`
+	StripePriceID               *string    `json:"-" db:"stripe_price_id"`
+	StripeSubscriptionStatus    *string    `json:"-" db:"stripe_subscription_status"`
+	StripeSubscriptionPeriodEnd *time.Time `json:"-" db:"stripe_subscription_period_end"`
 }
 
 type UserStore struct {
@@ -46,7 +51,6 @@ func (s *UserStore) Create(ctx context.Context, user *User) error {
 		) VALUES (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 		) RETURNING id, created_at`
-    // Ensure email_verified is set to false by default during creation by the service layer if not explicitly passed
 	err := s.db.QueryRowContext(ctx, query, user.Username, user.Age, user.FirstName, user.LastName, user.Email, user.HashedPassword, user.AvatarUrl, user.FirebaseUID, user.AuthProvider, user.EmailVerified).Scan(&user.Id, &user.CreatedAt)
 	if err != nil {
 		return err
@@ -91,15 +95,14 @@ func (s *UserStore) GetById(ctx context.Context, id int64) (*User, error) {
 	defer cancel()
 
 	var user User
-	// Ensure all fields including email_verified are selected
 	query := `
-  SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at
+  SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_subscription_status, stripe_subscription_period_end
   FROM users WHERE id = $1;
   `
-	err := s.db.GetContext(ctx, &user, query, id) // sqlx.GetContext handles mapping to struct fields
+	err := s.db.GetContext(ctx, &user, query, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil // Or your custom not found error
+			return nil, sql.ErrNoRows 
 		}
 		return nil, err
 	}
@@ -111,7 +114,7 @@ func (s *UserStore) GetByUsername(ctx context.Context, username string) (*User, 
 	defer cancel()
 
 	var user User
-	query := `SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at
+	query := `SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_subscription_status, stripe_subscription_period_end
   FROM users WHERE username = $1`
 
 	err := s.db.GetContext(ctx, &user, query, username)
@@ -130,7 +133,7 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 
 	var user User
 	query := `
-    SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at
+    SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_subscription_status, stripe_subscription_period_end
     FROM users
     WHERE email = $1
   `
@@ -138,7 +141,7 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 	err := s.db.GetContext(ctx, &user, query, email)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, sql.ErrNoRows 
 		}
 		return nil, err
 	}
@@ -172,13 +175,12 @@ func (s *UserStore) GetByFirebaseUID(ctx context.Context, firebaseUID string) (*
 	defer cancel()
 
 	var user User
-	// Ensure all fields including email_verified are selected
-	query := `SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at
+	query := `SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_subscription_status, stripe_subscription_period_end
     FROM users WHERE firebase_uid = $1`
 	err := s.db.GetContext(ctx, &user, query, firebaseUID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, sql.ErrNoRows 
 		}
 		return nil, err
 	}
@@ -219,9 +221,9 @@ func (s *UserStore) GetEmailVerificationToken(ctx context.Context, userId int64)
 	err = s.db.QueryRowContext(ctx, query, userId).Scan(&dbToken, &dbExpiresAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", time.Time{}, nil 
+			return "", time.Time{}, sql.ErrNoRows 
 		}
-		return "", time.Time{}, err 
+		return "", time.Time{}, err
 	}
     if dbToken.Valid {
         token = dbToken.String
@@ -249,4 +251,53 @@ func (s *UserStore) VerifyUserEmail(ctx context.Context, userId int64) error {
 	}
 
 	return nil
+}
+
+func (s *UserStore) UpdateUserSubscription(ctx context.Context, userID int64, subscriptionID int64, stripeCustomerID, stripeSubscriptionID, stripePriceID, stripeStatus string, periodEnd time.Time) error {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	query := `
+		UPDATE users
+		SET
+			subscription_id = $1,
+			stripe_customer_id = $2,
+			stripe_subscription_id = $3,
+			stripe_price_id = $4,
+			stripe_subscription_status = $5,
+			stripe_subscription_period_end = $6,
+			updated_at = NOW()
+		WHERE id = $7`
+
+	_, err := s.db.ExecContext(ctx, query,
+		subscriptionID,
+		stripeCustomerID,
+		stripeSubscriptionID,
+		stripePriceID,
+		stripeStatus,
+		periodEnd,
+		userID,
+	)
+	if err != nil {
+		log.Printf("Error updating user subscription for user ID %d: %v", userID, err)
+		return err
+	}
+	log.Printf("Successfully updated subscription for user ID %d to subscription ID %d", userID, subscriptionID)
+	return nil
+}
+
+func (s *UserStore) GetSubscriptionByName(ctx context.Context, name string) (*Subscription, error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	var sub Subscription
+	query := `SELECT id, name, description, price, duration_days FROM subscriptions WHERE name = $1 LIMIT 1`
+	err := s.db.GetContext(ctx, &sub, query, name)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("subscription with name '%s' not found", name)
+		}
+		return nil, err
+	}
+	return &sub, nil
 }

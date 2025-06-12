@@ -25,6 +25,8 @@ type Storage struct {
 		AddEmailVerificationToken(ctx context.Context, userId int64, token string, expiresAt time.Time) error
 		GetEmailVerificationToken(ctx context.Context, userId int64) (token string, expiresAt time.Time, err error)
 		VerifyUserEmail(ctx context.Context, userId int64) error
+		UpdateUserSubscription(ctx context.Context, userID int64, subscriptionID int64, stripeCustomerID, stripeSubscriptionID, stripePriceID, stripeStatus string, periodEnd time.Time) error
+		GetSubscriptionByName(ctx context.Context, name string) (*Subscription, error)
 	}
 	Posts interface {
 		Create(context.Context, *Post) error
@@ -99,8 +101,6 @@ type Storage struct {
 	}
 }
 
-// We can create internal/postgres, internal/mongodb, internal/mysql
-// if we have multiple db
 func NewStore(db *sqlx.DB) *Storage {
 	return &Storage{
 		Users:         &UserStore{db},
@@ -126,7 +126,6 @@ type PaginatedList[T any] struct {
 	TotalPages int   `json:"total_pages"`
 }
 
-// NewPaginatedList creates a PaginatedList from a slice of items
 func NewPaginatedList[T any](items []T, totalCount, limit, offset int) (*PaginatedList[T], error) {
 	if limit <= 0 || limit > 100 {
 		return nil, errors.New("limit must be between 1 and 100")

@@ -1,4 +1,3 @@
-// birdlens-be/cmd/api/auth.go
 package main
 
 import (
@@ -7,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -18,6 +16,7 @@ import (
 	"github.com/sixync/birdlens-be/internal/response"
 	"github.com/sixync/birdlens-be/internal/store"
 	"github.com/sixync/birdlens-be/internal/validator"
+	"log/slog" 
 )
 
 type LoginUserReq struct {
@@ -43,6 +42,7 @@ type LoginUserRes struct {
 }
 
 func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
+	app.logger.Info("<<<<< LOGIN HANDLER REACHED >>>>>", "method", r.Method, "path", r.URL.Path)
 	var req LoginUserReq
 	if err := request.DecodeJSON(w, r, &req); err != nil {
 		app.badRequest(w, r, err)
@@ -55,45 +55,54 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-
 	var subParam string
 
 	subscription, err := app.store.Subscriptions.GetUserSubscriptionByEmail(ctx, req.Email)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		app.logger.Error("Failed to get user subscription by email during login", "email", req.Email, "error", err)
 		app.serverError(w, r, err)
 		return
 	}
-
-	if subscription != nil {
+	if err == nil && subscription != nil {
+		app.logger.Info("User subscription found during login", "email", req.Email, "subscription_name", subscription.Name)
 		subParam = subscription.Name
+	} else {
+		app.logger.Info("No active subscription found or user does not exist for subscription check during login", "email", req.Email)
 	}
+
 
 	customToken, err := app.authService.Login(ctx, req.Email, req.Password, subParam)
 	if err != nil {
+		app.logger.Info("AuthService.Login returned an error", "email", req.Email, "error_type", fmt.Sprintf("%T", err), "error_value", err.Error())
 		switch {
+		case errors.Is(err, auth.ErrUserNotFound):
+			app.logger.Warn("Login attempt failed: User not found", "email", req.Email)
+			app.invalidCredentials(w, r) // Returns 400 "invalid credentials"
+		case errors.Is(err, auth.ErrIncorrectPassword):
+			app.logger.Warn("Login attempt failed: Incorrect password", "email", req.Email)
+			app.invalidCredentials(w, r) // Returns 400 "invalid credentials"
 		case errors.Is(err, auth.ErrMailNotVerified):
-			log.Println("user email not verified")
-			app.badRequest(w, r, errors.New("email not verified, please check your inbox for a verification link"))
+			app.logger.Info("Login attempt failed: Email not verified", "email", req.Email)
+			app.badRequest(w, r, errors.New("email not verified, please check your inbox for a verification link")) // Returns 400
 		default:
-			log.Println("error logging in user with email", req.Email, "and error", err)
-			app.serverError(w, r, err)
+			app.logger.Error("Unhandled error during login process", "email", req.Email, "error", err)
+			app.serverError(w, r, err) // Returns 500
 		}
 		return
 	}
 
-	log.Println("pass create session with result", customToken)
-
+	app.logger.Info("Login successful, custom token generated", "email", req.Email)
 	response.JSON(w, http.StatusOK, customToken, false, "login successful")
 }
 
 func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) {
+	app.logger.Info("<<<<< REGISTER HANDLER REACHED >>>>>", "method", r.Method, "path", r.URL.Path)
 	var req auth.RegisterUserReq
 	if err := request.DecodeJSON(w, r, &req); err != nil {
 		app.badRequest(w, r, err)
 		return
 	}
 
-	// Validate the request
 	if err := validator.Validate(req); err != nil {
 		app.badRequest(w, r, err)
 		return
@@ -108,21 +117,20 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if !valid {
-		log.Println("invalid register user req with valid", valid, "and msg", msg)
+		app.logger.Warn("Invalid registration request", "reason", msg, "email", req.Email, "username", req.Username)
 		app.badRequest(w, r, errors.New(msg))
 		return
 	}
 
-	log.Println("valid register user req with valid", valid, "and msg", msg)
+	app.logger.Info("Valid registration request", "email", req.Email, "username", req.Username)
 
 	customerToken, userId, err := app.authService.Register(ctx, req)
 	if err != nil {
-		app.badRequest(w, r, err)
+		app.logger.Error("Error during user registration in auth service", "email", req.Email, "error", err)
+		app.badRequest(w, r, err) 
 		return
 	}
 
-	// send verification email
-	// create token
 	emailToken, err := app.tokenMaker.CreateRandomToken()
 	if err != nil {
 		app.serverError(w, r, err)
@@ -134,17 +142,13 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 
 	app.store.Users.AddEmailVerificationToken(ctx, userId, emailToken, expiresAt)
 
-	// store email token in the database
-
 	links := url.Values{
 		"token":   []string{emailToken},
 		"user_id": []string{strconv.FormatInt(userId, 10)},
 	}
-	// Use app.config.baseURL which should be the public URL of the backend (e.g., http://localhost)
-	// The path will be /auth/verify-email as defined in routes.go
 	activationURL := app.config.baseURL + "/auth/verify-email?" + links.Encode()
 
-	log.Println("activationURL", activationURL)
+	app.logger.Info("Activation URL generated for user", "user_id", userId, "url_fragment", "/auth/verify-email?"+links.Encode())
 
 	sendVerificationEmail(req.Email, req.Username, activationURL)
 
@@ -152,6 +156,7 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Request) {
+	app.logger.Info("<<<<< REFRESH TOKEN HANDLER REACHED >>>>>", "method", r.Method, "path", r.URL.Path)
 	var req RefreshTokenReq
 	if err := request.DecodeJSON(w, r, &req); err != nil {
 		app.badRequest(w, r, err)
@@ -166,25 +171,26 @@ func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	claims, err := app.tokenMaker.GetUserClaimsFromToken(req.AccessToken)
 	if err != nil {
-		log.Println("error getting user claims from token", err)
+		app.logger.Warn("Error getting user claims from token during refresh", "error", err)
 		app.unauthorized(w, r)
 		return
 	}
 
 	if claims == nil {
-		log.Println("claims is nil")
+		app.logger.Warn("Claims are nil during token refresh")
 		app.unauthorized(w, r)
 		return
 	}
 
 	session, err := app.store.Sessions.GetById(ctx, claims.ID)
 	if err != nil {
+		app.logger.Warn("Session not found during token refresh", "session_id", claims.ID, "error", err)
 		app.unauthorized(w, r)
 		return
 	}
 
 	if session.IsRevoked || session.ExpiresAt.Before(time.Now()) {
-		log.Println("session is revoked or expired")
+		app.logger.Warn("Session is revoked or expired during token refresh", "session_id", claims.ID, "is_revoked", session.IsRevoked, "expires_at", session.ExpiresAt)
 		app.unauthorized(w, r)
 		return
 	}
@@ -203,12 +209,11 @@ func (app *application) refreshTokenHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (app *application) handleUserSession(ctx context.Context, user *store.User, refreshToken string, refreshTokenExp time.Time) error {
-	log.Println("hit handleUserSession with user, refreshToken, refreshTokenExp", user, refreshToken, refreshTokenExp)
+	app.logger.Info("Handling user session", "user_id", user.Id, "email", user.Email)
 	s, err := app.store.Sessions.GetById(ctx, user.Id)
 
-	// Create if not found and add expire if found
 	if err != nil && errors.Is(err, sql.ErrNoRows) {
-		log.Println("create new session")
+		app.logger.Info("Creating new session for user", "user_id", user.Id)
 		session := &store.Session{
 			ID:           user.Id,
 			UserEmail:    user.Email,
@@ -218,21 +223,22 @@ func (app *application) handleUserSession(ctx context.Context, user *store.User,
 		}
 		err = app.store.Sessions.Create(ctx, session)
 		if err != nil {
+			app.logger.Error("Failed to create new session", "user_id", user.Id, "error", err)
 			return err
 		}
-	} else { // Update if found
-		log.Println("update session with session is", s)
-		log.Println("this is refreshTokenExp", refreshTokenExp)
-		log.Println("this is s.expireat", s.ExpiresAt)
+	} else if err == nil {
+		app.logger.Info("Updating existing session for user", "user_id", user.Id, "old_expires_at", s.ExpiresAt, "new_expires_at", refreshTokenExp)
 		s.ExpiresAt = refreshTokenExp
 		s.RefreshToken = refreshToken
-		log.Println("session after update", s)
 		err := app.store.Sessions.UpdateSession(ctx, s)
 		if err != nil {
+			app.logger.Error("Failed to update session", "user_id", user.Id, "error", err)
 			return err
 		}
+	} else {
+		app.logger.Error("Error fetching session for user", "user_id", user.Id, "error", err)
+		return err
 	}
-
 	return nil
 }
 
@@ -283,16 +289,15 @@ const verificationFailedHTML = `
 </html>
 `
 
-// verifyEmailHandler will now be a GET request and respond with HTML.
 func (app *application) verifyEmailHandler(w http.ResponseWriter, r *http.Request) {
+	app.logger.Info("<<<<< VERIFY EMAIL HANDLER REACHED >>>>>", "method", r.Method, "path", r.URL.Path, "query", r.URL.RawQuery)
 	ctx := r.Context()
 
-	// Get the token from the query parameters
 	token := r.URL.Query().Get("token")
 	userIdStr := r.URL.Query().Get("user_id")
 
 	if token == "" || userIdStr == "" {
-		log.Println("verifyEmailHandler: missing token or user_id")
+		app.logger.Warn("verifyEmailHandler: missing token or user_id", "token_present", token != "", "user_id_present", userIdStr != "")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, verificationFailedHTML, "Missing token or user ID in verification link.")
@@ -301,32 +306,33 @@ func (app *application) verifyEmailHandler(w http.ResponseWriter, r *http.Reques
 
 	userIdInt, err := strconv.ParseInt(userIdStr, 10, 64)
 	if err != nil {
-		log.Printf("verifyEmailHandler: invalid user_id format: %s", userIdStr)
+		app.logger.Warn("verifyEmailHandler: invalid user_id format", "user_id_str", userIdStr, "error", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, verificationFailedHTML, "Invalid user ID format.")
 		return
 	}
 
-	// Verify the token
 	storedToken, expiresAt, err := app.store.Users.GetEmailVerificationToken(ctx, userIdInt)
 	if err != nil {
-		log.Printf("verifyEmailHandler: error getting token for user %d: %v", userIdInt, err)
 		errMsg := "Invalid or expired verification link."
 		if errors.Is(err, sql.ErrNoRows) {
-			log.Println("no email verification token found for user", userIdInt)
+			app.logger.Info("No email verification token found for user", "user_id", userIdInt)
 		} else {
-			// For other DB errors, don't expose details to user
-			// app.serverError(w, r, err) // This sends JSON, we want HTML
+			app.logger.Error("Error getting email verification token from store", "user_id", userIdInt, "error", err)
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusBadRequest) // Or StatusNotFound
+		w.WriteHeader(http.StatusBadRequest) 
 		fmt.Fprintf(w, verificationFailedHTML, errMsg)
 		return
 	}
 
 	if storedToken != token || time.Now().After(expiresAt) {
-		log.Printf("verifyEmailHandler: token mismatch or expired. Stored: %s, Received: %s, Expires: %v, Now: %v", storedToken, token, expiresAt, time.Now())
+		app.logger.Warn("verifyEmailHandler: token mismatch or expired",
+			"user_id", userIdInt,
+			"token_matches", storedToken == token,
+			"is_expired", time.Now().After(expiresAt),
+			"expires_at", expiresAt)
 		errMsg := "Verification link is invalid or has expired."
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusBadRequest)
@@ -334,17 +340,16 @@ func (app *application) verifyEmailHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Update the user's email verification status
 	err = app.store.Users.VerifyUserEmail(ctx, userIdInt)
 	if err != nil {
-		log.Printf("verifyEmailHandler: error updating user email verification status for user %d: %v", userIdInt, err)
+		app.logger.Error("Error updating user email verification status", "user_id", userIdInt, "error", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, verificationFailedHTML, "An error occurred while verifying your email. Please try again.")
 		return
 	}
 
-	log.Printf("verifyEmailHandler: email verified successfully for user %d", userIdInt)
+	app.logger.Info("Email verified successfully", "user_id", userIdInt)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, verificationSuccessHTML)
@@ -353,7 +358,6 @@ func (app *application) verifyEmailHandler(w http.ResponseWriter, r *http.Reques
 
 func (app *application) validRegisterUserReq(ctx context.Context, req auth.RegisterUserReq) (exists bool, msg string, err error) {
 	con1, err := app.store.Users.EmailExists(ctx, req.Email)
-	// case exists
 	if con1 {
 		msg += "email already exists\n"
 	}
@@ -362,7 +366,6 @@ func (app *application) validRegisterUserReq(ctx context.Context, req auth.Regis
 	}
 
 	con2, err := app.store.Users.UsernameExists(ctx, req.Username)
-	// case exists
 	if con2 {
 		msg += "username already exists\n"
 	}
@@ -374,7 +377,6 @@ func (app *application) validRegisterUserReq(ctx context.Context, req auth.Regis
 }
 
 func sendVerificationEmail(recipient, username, activationURL string) error {
-	// create email job
 	data := struct {
 		Username      string
 		ActivationURL string
@@ -383,7 +385,7 @@ func sendVerificationEmail(recipient, username, activationURL string) error {
 		ActivationURL: activationURL,
 	}
 
-	log.Println("sent email job with data", data)
+	slog.Info("Queuing verification email job", "recipient", recipient, "username", username)
 	JobQueue <- EmailJob{
 		Recipient: recipient,
 		Data:      data,
@@ -393,7 +395,6 @@ func sendVerificationEmail(recipient, username, activationURL string) error {
 	return nil
 }
 
-// Template for parsing HTML responses directly from handler
 var htmlTmpl = template.Must(template.New("messagePage").Parse(`
 <!DOCTYPE html><html><head><title>{{.Title}}</title></head><body><h1>{{.Title}}</h1><p>{{.Message}}</p></body></html>`))
 
