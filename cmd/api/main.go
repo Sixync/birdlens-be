@@ -21,6 +21,7 @@ import (
 	"github.com/sixync/birdlens-be/internal/store"
 	mediamanager "github.com/sixync/birdlens-be/internal/store/media_manager"
 	"github.com/sixync/birdlens-be/internal/version"
+	"github.com/stripe/stripe-go/v82" // Import Stripe SDK
 	"google.golang.org/api/option"
 
 	"github.com/lmittmann/tint"
@@ -61,6 +62,10 @@ type config struct {
 		refreshTokenExpDurationDay int
 	}
 	emailVerificationExpiresInHours int
+	stripe                          struct { // Stripe configuration
+		secretKey     string
+		publishableKey string // Good to have, though not used in this backend part
+	}
 }
 
 type EmailJob struct {
@@ -87,8 +92,8 @@ func run(logger *slog.Logger) error {
 	cfg.httpPort = env.GetInt("HTTP_PORT", 6969)
 	godotenv.Load("/env/mail.env")
 	godotenv.Load("/env/.env")
+	godotenv.Load("/env/stripe.env") // Load Stripe environment variables
 
-	// boilerplate
 	cfg.baseURL = env.GetString("BASE_URL", "http://localhost:8090")
 	cfg.basicAuth.username = env.GetString("BASIC_AUTH_USERNAME", "admin")
 	cfg.basicAuth.hashedPassword = env.GetString("BASIC_AUTH_HASHED_PASSWORD", "$2a$10$jRb2qniNcoCyQM23T59RfeEQUbgdAXfR6S0scynmKfJa5Gj3arGJa")
@@ -104,7 +109,17 @@ func run(logger *slog.Logger) error {
 	cfg.frontEndUrl = env.GetString("FRONTEND_URL", "http://localhost")
 	cfg.emailVerificationExpiresInHours = env.GetInt("EMAIL_VERIFICATION_EXPIRES_IN_HOURS", 7)
 
+	// Stripe Configuration
+	cfg.stripe.secretKey = env.GetString("STRIPE_SECRET_KEY", "")
+	cfg.stripe.publishableKey = env.GetString("STRIPE_PUBLISHABLE_KEY", "")
+
+	stripe.Key = cfg.stripe.secretKey // Initialize Stripe SDK with secret key
+
 	log.Println("frontend url is", cfg.frontEndUrl)
+	log.Println("Stripe Secret Key Loaded:", cfg.stripe.secretKey != "")
+	log.Println("Stripe Publishable Key Loaded:", cfg.stripe.publishableKey != "")
+
+
 	showVersion := flag.Bool("version", false, "display version and exit")
 
 	flag.Parse()
@@ -177,16 +192,10 @@ func run(logger *slog.Logger) error {
 }
 
 func worker(mailer *smtp.Mailer, id int) {
-	// The `for range` on a channel will block until a job is available
-	// or the channel is closed.
 	for job := range JobQueue {
 		log.Printf("Worker %d: processing email job for %s", id, job.Recipient)
-
-		// Use the global Mailer instance to send the email.
-		// Your Send method already has a built-in retry mechanism, which is great!
 		err := mailer.Send(job.Recipient, job.Data, job.Patterns...)
 		if err != nil {
-			// If all 3 retries fail, we log the final error.
 			log.Printf("Worker %d: FAILED to send email to %s after retries: %v", id, job.Recipient, err)
 		} else {
 			log.Printf("Worker %d: successfully sent email to %s", id, job.Recipient)
@@ -194,10 +203,8 @@ func worker(mailer *smtp.Mailer, id int) {
 	}
 }
 
-// startWorkerPool starts a fixed number of workers.
 func startWorkerPool(mailer *smtp.Mailer, numWorkers int) {
 	for w := 1; w <= numWorkers; w++ {
-		// Launch each worker in its own goroutine.
 		go worker(mailer, w)
 	}
 	log.Printf("Started %d email workers", numWorkers)

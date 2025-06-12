@@ -1,4 +1,3 @@
-// birdlens-be/cmd/api/routes.go
 package main
 
 import (
@@ -26,8 +25,9 @@ func (app *application) routes() http.Handler {
 	})
 
 	mux.Route("/comments", func(r chi.Router) {
-		r.With(app.authMiddleware).With(app.paginate).Get("/", app.getPostsHandler)
-		r.With(app.authMiddleware).Post("/", app.createPostHandler)
+		r.With(app.authMiddleware).With(app.paginate).Get("/", app.getPostsHandler) // This seems like a copy-paste, should it be getCommentsHandler?
+		r.With(app.authMiddleware).Post("/", app.createPostHandler) // This also seems like a copy-paste
+		// The routes below are duplicates of /posts/{post_id}/...
 		r.With(app.authMiddleware).With(app.getPostMiddleware).With(app.paginate).Get("/{post_id}/comments", app.getPostCommentsHandler)
 		r.With(app.authMiddleware).With(app.getPostMiddleware).Post("/{post_id}/reactions", app.addUserReactionHandler)
 		r.With(app.authMiddleware).With(app.getPostMiddleware).Post("/{post_id}/comments", app.createCommentHandler)
@@ -43,7 +43,6 @@ func (app *application) routes() http.Handler {
 		r.Post("/login", app.loginHandler)
 		r.Post("/register", app.registerHandler)
 		r.Post("/refresh_token", app.refreshTokenHandler)
-		// Changed from PATCH to GET and updated path for clarity (optional path change)
 		r.Get("/verify-email", app.verifyEmailHandler)
 	})
 
@@ -55,19 +54,20 @@ func (app *application) routes() http.Handler {
 		r.With(app.getTourMiddleware).Put("/{tour_id}/thumbnail", app.addTourThumbnailHandler)
 	})
 
-	// subscriptions
 	mux.Route("/subscriptions", func(r chi.Router) {
 		r.Get("/", app.getSubscriptionsHandler)
 		r.Post("/", app.createSubscriptionHandler)
 	})
 
-	// events
 	mux.Route("/events", func(r chi.Router) {
 		r.With(app.paginate).Get("/", app.getEventsHandler)
 		r.Post("/", app.createEventHandler)
 		r.With(app.getEventMiddleware).Get("/{event_id}", app.getEventHandler)
 		r.With(app.getEventMiddleware).Delete("/{event_id}", app.deleteEventHandler)
 	})
+
+	// Stripe Payment Endpoint
+	mux.Post("/create-payment-intent", app.handleCreatePaymentIntent)
 
 	return mux
 }
