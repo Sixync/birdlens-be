@@ -26,8 +26,8 @@ func (app *application) routes() http.Handler {
 	})
 
 	mux.Route("/comments", func(r chi.Router) {
-		r.With(app.authMiddleware).With(app.paginate).Get("/", app.getPostsHandler) 
-		r.With(app.authMiddleware).Post("/", app.createPostHandler) 
+		r.With(app.authMiddleware).With(app.paginate).Get("/", app.getPostsHandler)
+		r.With(app.authMiddleware).Post("/", app.createPostHandler)
 		r.With(app.authMiddleware).With(app.getPostMiddleware).With(app.paginate).Get("/{post_id}/comments", app.getPostCommentsHandler)
 		r.With(app.authMiddleware).With(app.getPostMiddleware).Post("/{post_id}/reactions", app.addUserReactionHandler)
 		r.With(app.authMiddleware).With(app.getPostMiddleware).Post("/{post_id}/comments", app.createCommentHandler)
@@ -44,6 +44,8 @@ func (app *application) routes() http.Handler {
 		r.Post("/register", app.registerHandler)
 		r.Post("/refresh_token", app.refreshTokenHandler)
 		r.Get("/verify-email", app.verifyEmailHandler)
+		r.Post("/forgot-password", app.forgotPasswordHandler)
+		r.Post("/reset-password", app.resetPasswordHandler)
 	})
 
 	mux.Route("/tours", func(r chi.Router) {
@@ -57,7 +59,7 @@ func (app *application) routes() http.Handler {
 	mux.Route("/subscriptions", func(r chi.Router) {
 		r.Get("/", app.getSubscriptionsHandler)
 		// Creating subscriptions should likely be an admin-only or controlled operation
-		// r.Post("/", app.createSubscriptionHandler) 
+		// r.Post("/", app.createSubscriptionHandler)
 	})
 
 	mux.Route("/events", func(r chi.Router) {
