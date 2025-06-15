@@ -14,7 +14,7 @@ import (
 type User struct {
 	Id                              int64      `json:"id" db:"id"`
 	FirebaseUID                     *string    `json:"-" db:"firebase_uid"`
-	SubscriptionId                  *int64     `json:"-" db:"subscription_id"` 
+	SubscriptionId                  *int64     `json:"-" db:"subscription_id"`
 	Username                        string     `json:"username" db:"username"`
 	Age                             int        `json:"age" db:"age"`
 	FirstName                       string     `json:"first_name" db:"first_name"`
@@ -102,7 +102,7 @@ func (s *UserStore) GetById(ctx context.Context, id int64) (*User, error) {
 	err := s.db.GetContext(ctx, &user, query, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, sql.ErrNoRows 
+			return nil, sql.ErrNoRows
 		}
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 	err := s.db.GetContext(ctx, &user, query, email)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, sql.ErrNoRows 
+			return nil, sql.ErrNoRows
 		}
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func (s *UserStore) GetByFirebaseUID(ctx context.Context, firebaseUID string) (*
 	err := s.db.GetContext(ctx, &user, query, firebaseUID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, sql.ErrNoRows 
+			return nil, sql.ErrNoRows
 		}
 		return nil, err
 	}
@@ -221,16 +221,16 @@ func (s *UserStore) GetEmailVerificationToken(ctx context.Context, userId int64)
 	err = s.db.QueryRowContext(ctx, query, userId).Scan(&dbToken, &dbExpiresAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", time.Time{}, sql.ErrNoRows 
+			return "", time.Time{}, sql.ErrNoRows
 		}
 		return "", time.Time{}, err
 	}
-    if dbToken.Valid {
-        token = dbToken.String
-    }
-    if dbExpiresAt.Valid {
-        expiresAt = dbExpiresAt.Time
-    }
+	if dbToken.Valid {
+		token = dbToken.String
+	}
+	if dbExpiresAt.Valid {
+		expiresAt = dbExpiresAt.Time
+	}
 
 	return token, expiresAt, nil
 }
@@ -300,4 +300,43 @@ func (s *UserStore) GetSubscriptionByName(ctx context.Context, name string) (*Su
 		return nil, err
 	}
 	return &sub, nil
+}
+
+func (s *UserStore) AddResetPasswordToken(ctx context.Context, email string, token string, expiresAt time.Time) error {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	query := `
+    UPDATE users
+    SET forgot_password_token = $1, forgot_password_token_expires_at = $2
+    WHERE email = $3;
+  `
+
+	_, err := s.db.ExecContext(ctx, query, token, expiresAt, email)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *UserStore) GetUserByResetPasswordToken(ctx context.Context, token string) (*User, error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	var user User
+	query := `
+    SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_subscription_status, stripe_subscription_period_end
+    FROM users
+    WHERE forgot_password_token = $1 AND forgot_password_token_expires_at > NOW()
+  `
+
+	err := s.db.GetContext(ctx, &user, query, token)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, sql.ErrNoRows
+		}
+		return nil, err
+	}
+	return &user, nil
 }

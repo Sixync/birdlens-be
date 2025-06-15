@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -15,8 +16,8 @@ import (
 	"github.com/sixync/birdlens-be/internal/request"
 	"github.com/sixync/birdlens-be/internal/response"
 	"github.com/sixync/birdlens-be/internal/store"
+	"github.com/sixync/birdlens-be/internal/utils"
 	"github.com/sixync/birdlens-be/internal/validator"
-	"log/slog" 
 )
 
 type LoginUserReq struct {
@@ -69,7 +70,6 @@ func (app *application) loginHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		app.logger.Info("No active subscription found or user does not exist for subscription check during login", "email", req.Email)
 	}
-
 
 	customToken, err := app.authService.Login(ctx, req.Email, req.Password, subParam)
 	if err != nil {
@@ -127,7 +127,7 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 	customerToken, userId, err := app.authService.Register(ctx, req)
 	if err != nil {
 		app.logger.Error("Error during user registration in auth service", "email", req.Email, "error", err)
-		app.badRequest(w, r, err) 
+		app.badRequest(w, r, err)
 		return
 	}
 
@@ -322,7 +322,7 @@ func (app *application) verifyEmailHandler(w http.ResponseWriter, r *http.Reques
 			app.logger.Error("Error getting email verification token from store", "user_id", userIdInt, "error", err)
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusBadRequest) 
+		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, verificationFailedHTML, errMsg)
 		return
 	}
@@ -355,6 +355,109 @@ func (app *application) verifyEmailHandler(w http.ResponseWriter, r *http.Reques
 	fmt.Fprint(w, verificationSuccessHTML)
 }
 
+type ForgotPasswordRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+func (app *application) forgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
+	app.logger.Info("<<<<< FORGOT PASSWORD HANDLER REACHED >>>>>", "method", r.Method, "path", r.URL.Path)
+	var req ForgotPasswordRequest
+	if err := request.DecodeJSON(w, r, &req); err != nil {
+		app.badRequest(w, r, err)
+		return
+	}
+
+	if err := validator.Validate(req); err != nil {
+		app.badRequest(w, r, err)
+		return
+	}
+
+	token, err := app.tokenMaker.CreateRandomToken()
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	app.logger.Info("Generated reset password token", "email", req.Email, "token", token)
+
+	duration := time.Duration(app.config.forgotPasswordExpiresInHours) * time.Hour
+	expires := time.Now().Add(duration)
+	if expires.Before(time.Now()) {
+		app.logger.Debug("Reset password token expiration time is in the past with expires", "expires_at", expires, "duration", duration, "current_time", time.Now())
+	}
+
+	app.logger.Info("Reset password token will expire at", "expires_at", expires)
+
+	ctx := r.Context()
+
+	err = app.store.Users.AddResetPasswordToken(ctx, req.Email, token, expires)
+	if err != nil {
+		app.logger.Error("Error adding reset password token", "email", req.Email, "error", err)
+		app.serverError(w, r, err)
+		return
+	}
+
+	links := url.Values{
+		"token": []string{token},
+	}
+	resetUrl := app.config.baseURL + "/auth/reset-password?" + links.Encode()
+	app.logger.Info("Reset password URL generated", "email", req.Email, "reset_url", resetUrl)
+
+	linkValidity := app.config.forgotPasswordExpiresInHours
+
+	sendResetPasswordEmail(req.Email, resetUrl, linkValidity)
+
+	app.logger.Info("Reset password email sent", "email", req.Email, "reset_url", resetUrl)
+	response.JSON(w, http.StatusOK, nil, false, "reset password email sent successfully")
+}
+
+type ResetPasswordRequest struct {
+	Token       string `json:"token" validate:"required"`
+	NewPassword string `json:"new_password" validate:"required,min=3"`
+}
+
+func (app *application) resetPasswordHandler(w http.ResponseWriter, r *http.Request) {
+	var req ResetPasswordRequest
+	if err := request.DecodeJSON(w, r, &req); err != nil {
+		app.badRequest(w, r, err)
+		return
+	}
+
+	if err := validator.Validate(req); err != nil {
+		app.badRequest(w, r, err)
+		return
+	}
+
+	ctx := r.Context()
+	user, err := app.store.Users.GetUserByResetPasswordToken(ctx, req.Token)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			app.logger.Warn("Reset password token not found", "token", req.Token)
+			app.badRequest(w, r, errors.New("invalid or expired reset password token"))
+		default:
+			app.logger.Error("Error retrieving user by reset password", "token", req.Token, "error", err)
+			app.serverError(w, r, err)
+		}
+		return
+	}
+
+	newHashedPassword, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		app.logger.Error("Error hashing new password", "error", err)
+		app.serverError(w, r, err)
+		return
+	}
+
+	user.HashedPassword = &newHashedPassword
+	if err := app.store.Users.Update(ctx, user); err != nil {
+		app.logger.Error("Error updating user password", "user_id", user.Id, "error", err)
+		app.serverError(w, r, err)
+		return
+	}
+
+	app.logger.Info("User password reset successfully", "user_id", user.Id)
+	response.JSON(w, http.StatusOK, nil, false, "password reset successfully")
+}
 
 func (app *application) validRegisterUserReq(ctx context.Context, req auth.RegisterUserReq) (exists bool, msg string, err error) {
 	con1, err := app.store.Users.EmailExists(ctx, req.Email)
@@ -390,6 +493,25 @@ func sendVerificationEmail(recipient, username, activationURL string) error {
 		Recipient: recipient,
 		Data:      data,
 		Patterns:  []string{"user_welcome.tmpl"},
+	}
+
+	return nil
+}
+
+func sendResetPasswordEmail(recipient, resetURL string, linkValidity int) error {
+	data := struct {
+		ResetLink    string
+		LinkValidity int
+	}{
+		ResetLink:    resetURL,
+		LinkValidity: linkValidity,
+	}
+
+	slog.Info("Queuing reset password email job", "recipient", recipient)
+	JobQueue <- EmailJob{
+		Recipient: recipient,
+		Data:      data,
+		Patterns:  []string{"reset_password.tmpl"},
 	}
 
 	return nil

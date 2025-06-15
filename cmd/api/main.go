@@ -11,6 +11,8 @@ import (
 	"runtime/debug"
 	"sync"
 
+	"log/slog" // Structured logging
+
 	firebase "firebase.google.com/go"
 	"github.com/joho/godotenv"
 	"github.com/lmittmann/tint"
@@ -24,7 +26,6 @@ import (
 	"github.com/sixync/birdlens-be/internal/version"
 	"github.com/stripe/stripe-go/v82"
 	"google.golang.org/api/option"
-	"log/slog" // Structured logging
 )
 
 type config struct {
@@ -51,6 +52,7 @@ type config struct {
 		refreshTokenExpDurationDay int
 	}
 	emailVerificationExpiresInHours int
+	forgotPasswordExpiresInHours    int
 	stripe                          struct {
 		secretKey      string
 		publishableKey string
@@ -85,7 +87,7 @@ func main() {
 	logger := slog.New(slogHandler)
 	slog.SetDefault(logger) // Set default for any library using slog's default logger
 
-	log.Println("Slog logger configured.") // Standard log confirmation
+	log.Println("Slog logger configured.")                   // Standard log confirmation
 	slog.Info("Slog logger initialized and set as default.") // Slog confirmation
 
 	err := run(logger) // Pass the configured slog logger
@@ -133,6 +135,7 @@ func run(logger *slog.Logger) error {
 	cfg.basicAuth.username = env.GetString("BASIC_AUTH_USERNAME", "admin")
 	cfg.basicAuth.hashedPassword = env.GetString("BASIC_AUTH_HASHED_PASSWORD", "$2a$10$jRb2qniNcoCyQM23T59RfeEQUbgdAXfR6S0scynmKfJa5Gj3arGJa") // Default "pa55word"
 	cfg.db.dbConn = env.GetString("DB_ADDR", "postgres://admin:password@birdlens-db:5432/birdlens?sslmode=disable")
+
 	slog.Info("DB_ADDR for database connection", "value", cfg.db.dbConn)
 
 	cfg.smtp.host = env.GetString("SMTP_HOST", "mailpit")
@@ -147,16 +150,17 @@ func run(logger *slog.Logger) error {
 	cfg.jwt.refreshTokenExpDurationDay = env.GetInt("REFRESH_TOKEN_EXP_DAY", 1)
 	cfg.frontEndUrl = env.GetString("FRONTEND_URL", "http://localhost") // Assuming frontend is accessed via localhost (or actual domain)
 	cfg.emailVerificationExpiresInHours = env.GetInt("EMAIL_VERIFICATION_EXPIRES_IN_HOURS", 7)
+	cfg.forgotPasswordExpiresInHours = env.GetInt("FORGOT_PASSWORD_EXPIRES_IN_HOURS", 1)
 
 	cfg.stripe.secretKey = env.GetString("STRIPE_SECRET_KEY", "")
 	cfg.stripe.publishableKey = env.GetString("STRIPE_PUBLISHABLE_KEY", "")
-	cfg.stripe.webhookSecret = env.GetString("STRIPE_WEBHOOK_SECRET", "") 
+	cfg.stripe.webhookSecret = env.GetString("STRIPE_WEBHOOK_SECRET", "")
 
 	// Log the presence of each key
 	slog.Info("Stripe keys loaded",
-    "secret_key_present", cfg.stripe.secretKey != "",
-    "publishable_key_present", cfg.stripe.publishableKey != "",
-    "webhook_secret_present", cfg.stripe.webhookSecret != "") // Logged its presence
+		"secret_key_present", cfg.stripe.secretKey != "",
+		"publishable_key_present", cfg.stripe.publishableKey != "",
+		"webhook_secret_present", cfg.stripe.webhookSecret != "") // Logged its presence
 
 	if cfg.stripe.secretKey == "" {
 		slog.Warn("STRIPE_SECRET_KEY is not set. Payments will fail.")
@@ -246,7 +250,7 @@ func run(logger *slog.Logger) error {
 	}
 
 	cldClient := mediamanager.NewCloudinaryClient() // This might panic if creds are missing
-	if cldClient == nil {                          // Should not happen if NewCloudinaryClient panics on error
+	if cldClient == nil {                           // Should not happen if NewCloudinaryClient panics on error
 		slog.Error("Failed to create media client (CloudinaryClient was nil after initialization attempt).")
 		return errors.New("failed to create media client")
 	}

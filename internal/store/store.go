@@ -27,6 +27,8 @@ type Storage struct {
 		VerifyUserEmail(ctx context.Context, userId int64) error
 		UpdateUserSubscription(ctx context.Context, userID int64, subscriptionID int64, stripeCustomerID, stripeSubscriptionID, stripePriceID, stripeStatus string, periodEnd time.Time) error
 		GetSubscriptionByName(ctx context.Context, name string) (*Subscription, error)
+		AddResetPasswordToken(ctx context.Context, email string, token string, expiresAt time.Time) error
+		GetUserByResetPasswordToken(ctx context.Context, token string) (*User, error)
 	}
 	Posts interface {
 		Create(context.Context, *Post) error
