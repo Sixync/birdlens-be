@@ -59,7 +59,7 @@ func (app *application) routes() http.Handler {
 	mux.Route("/subscriptions", func(r chi.Router) {
 		r.Get("/", app.getSubscriptionsHandler)
 		// Creating subscriptions should likely be an admin-only or controlled operation
-		// r.Post("/", app.createSubscriptionHandler)
+		r.Post("/", app.createSubscriptionHandler)
 	})
 
 	mux.Route("/events", func(r chi.Router) {
