@@ -16,7 +16,18 @@ func (app *application) routes() http.Handler {
 
 	mux.Use(app.logAccess)
 	mux.Use(app.recoverPanic)
-
+	// Add CORS middleware to handle cross-origin requests
+	mux.Use(cors.Handler(cors.Options{
+		// AllowedOrigins: []string{"https://foo.com"}, // Use this to allow specific origin hosts
+		AllowedOrigins: []string{"https://birdlens.netlify.app", "http://localhost:5173"},
+		// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300, // Maximum value not ignored by any major browsers
+	}))
+	
 	mux.Route("/posts", func(r chi.Router) {
 		r.With(app.authMiddleware).With(app.paginate).Get("/", app.getPostsHandler)
 		r.With(app.authMiddleware).Post("/", app.createPostHandler)
