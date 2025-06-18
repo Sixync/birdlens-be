@@ -1,3 +1,4 @@
+// birdlens-be/cmd/api/auth.go
 package main
 
 import (
@@ -399,7 +400,8 @@ func (app *application) forgotPasswordHandler(w http.ResponseWriter, r *http.Req
 	links := url.Values{
 		"token": []string{token},
 	}
-	resetUrl := app.config.baseURL + "/auth/reset-password?" + links.Encode()
+	// Use the frontend URL for the reset password link
+	resetUrl := app.config.frontEndUrl + "/reset-password?" + links.Encode()
 	app.logger.Info("Reset password URL generated", "email", req.Email, "reset_url", resetUrl)
 
 	linkValidity := app.config.forgotPasswordExpiresInHours
