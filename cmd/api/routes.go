@@ -28,9 +28,9 @@ func (app *application) routes() http.Handler {
 	// 	MaxAge:           300, // Maximum value not ignored by any major browsers
 	// }))
 
-	r.Use(cors.Handler(cors.Options{
+	mux.Use(cors.Handler(cors.Options{
 		// AllowedOrigins:   []string{"https://foo.com"}, // Use this to allow specific origin hosts
-		AllowedOrigins:   []string{"https://*", "http://*"},
+		AllowedOrigins:   []string{"https://birdlens.netlify.app", "http://localhost:5173"},
 		// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
