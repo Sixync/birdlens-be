@@ -21,6 +21,8 @@ require (
 	google.golang.org/api v0.215.0
 )
 
+require github.com/go-chi/cors v1.2.1
+
 require (
 	cel.dev/expr v0.16.1 // indirect
 	cloud.google.com/go v0.117.0 // indirect

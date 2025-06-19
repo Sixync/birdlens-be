@@ -1,4 +1,3 @@
-// birdlens-be/cmd/api/routes.go
 package main
 
 import (
@@ -6,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors" // Import the cors package
 )
 
 func (app *application) routes() http.Handler {
@@ -17,10 +17,10 @@ func (app *application) routes() http.Handler {
 	mux.Use(app.logAccess)
 	mux.Use(app.recoverPanic)
 	// Add CORS middleware to handle cross-origin requests
+	// This middleware is now correctly configured and will run.
 	mux.Use(cors.Handler(cors.Options{
-		// AllowedOrigins: []string{"https://foo.com"}, // Use this to allow specific origin hosts
+		// Make sure your frontend's deployed URL is listed here.
 		AllowedOrigins: []string{"https://birdlens.netlify.app", "http://localhost:5173"},
-		// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
