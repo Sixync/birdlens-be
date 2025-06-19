@@ -18,16 +18,16 @@ func (app *application) routes() http.Handler {
 	mux.Use(app.recoverPanic)
 	// Add CORS middleware to handle cross-origin requests
 	// This middleware is now correctly configured and will run.
-	mux.Use(cors.Handler(cors.Options{
-		// Make sure your frontend's deployed URL is listed here.
-		AllowedOrigins: []string{"https://birdlens.netlify.app", "http://localhost:5173"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
-		MaxAge:           300, // Maximum value not ignored by any major browsers
-	}))
-	
+	// mux.Use(cors.Handler(cors.Options{
+	// 	// Make sure your frontend's deployed URL is listed here.
+	// 	AllowedOrigins: []string{"https://birdlens.netlify.app", "http://localhost:5173"},
+	// 	AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+	// 	AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+	// 	ExposedHeaders:   []string{"Link"},
+	// 	AllowCredentials: true,
+	// 	MaxAge:           300, // Maximum value not ignored by any major browsers
+	// }))
+
 	r.Use(cors.Handler(cors.Options{
 		// AllowedOrigins:   []string{"https://foo.com"}, // Use this to allow specific origin hosts
 		AllowedOrigins:   []string{"https://*", "http://*"},
