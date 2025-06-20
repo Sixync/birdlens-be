@@ -147,7 +147,10 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 		"token":   []string{emailToken},
 		"user_id": []string{strconv.FormatInt(userId, 10)},
 	}
-	activationURL := app.config.baseURL + "/auth/verify-email?" + links.Encode()
+	// Logic: Use the frontend URL for email verification links, not the backend base URL.
+	// This ensures users are directed to the Android app or web frontend.
+	// The frontend will then call the backend API at /auth/verify-email.
+	activationURL := app.config.frontEndUrl + "/auth/verify-email?" + links.Encode()
 
 	app.logger.Info("Activation URL generated for user", "user_id", userId, "url_fragment", "/auth/verify-email?"+links.Encode())
 
