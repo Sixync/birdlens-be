@@ -1,3 +1,4 @@
+// birdlens-be/cmd/api/routes.go
 package main
 
 import (
@@ -17,14 +18,13 @@ func (app *application) routes() http.Handler {
 	mux.Use(app.logAccess)
 	mux.Use(app.recoverPanic)
 
-	
 	mux.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{"https://birdlens.netlify.app", "http://localhost:5173"},
+		AllowedOrigins:   []string{"https-birdlens.netlify.app", "http://localhost:5173"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true, // Set to true to allow authenticated requests.
-		MaxAge:           300, // Maximum value not ignored by any major browsers
+		MaxAge:           300,  // Maximum value not ignored by any major browsers
 	}))
 	mux.Route("/posts", func(r chi.Router) {
 		r.With(app.authMiddleware).With(app.paginate).Get("/", app.getPostsHandler)
@@ -76,6 +76,12 @@ func (app *application) routes() http.Handler {
 		r.Post("/", app.createEventHandler)
 		r.With(app.getEventMiddleware).Get("/{event_id}", app.getEventHandler)
 		r.With(app.getEventMiddleware).Delete("/{event_id}", app.deleteEventHandler)
+	})
+
+	// Logic: Add a new route group for hotspot-related endpoints.
+	mux.Route("/hotspots", func(r chi.Router) {
+		// This endpoint is protected by authMiddleware. The handler will perform the ExBird subscription check.
+		r.With(app.authMiddleware).Get("/{locId}/visiting-times", app.getHotspotVisitingTimesHandler)
 	})
 
 	mux.With(app.authMiddleware).Post("/create-payment-intent", app.handleCreatePaymentIntent)

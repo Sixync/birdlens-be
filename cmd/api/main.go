@@ -58,6 +58,10 @@ type config struct {
 		publishableKey string
 		webhookSecret  string
 	}
+	// Logic: Add a new struct to hold eBird-related configuration.
+	eBird struct {
+		apiKey string
+	}
 }
 
 type EmailJob struct {
@@ -129,6 +133,11 @@ func run(logger *slog.Logger) error {
 	if errCloudinary != nil {
 		slog.Warn("Could not load /env/cloudinary.env", "error", errCloudinary)
 	}
+	// Logic: Load the new ebird.env file.
+	errEbird := godotenv.Load("/env/ebird.env")
+	if errEbird != nil {
+		slog.Warn("Could not load /env/ebird.env", "error", errEbird)
+	}
 
 	cfg.httpPort = env.GetInt("HTTP_PORT", 6969)
 	cfg.baseURL = env.GetString("BASE_URL", "http://localhost:8090") // Nginx listens on 80, Go on 6969. BaseURL is external.
@@ -156,11 +165,17 @@ func run(logger *slog.Logger) error {
 	cfg.stripe.publishableKey = env.GetString("STRIPE_PUBLISHABLE_KEY", "")
 	cfg.stripe.webhookSecret = env.GetString("STRIPE_WEBHOOK_SECRET", "")
 
+	// Logic: Read the EBIRD_API_KEY from the environment into the config struct.
+	cfg.eBird.apiKey = env.GetString("EBIRD_API_KEY", "")
+
 	// Log the presence of each key
 	slog.Info("Stripe keys loaded",
 		"secret_key_present", cfg.stripe.secretKey != "",
 		"publishable_key_present", cfg.stripe.publishableKey != "",
-		"webhook_secret_present", cfg.stripe.webhookSecret != "") // Logged its presence
+		"webhook_secret_present", cfg.stripe.webhookSecret != "")
+
+	// Logic: Add a log to confirm the eBird key was loaded.
+	slog.Info("eBird API key loaded", "present", cfg.eBird.apiKey != "")
 
 	if cfg.stripe.secretKey == "" {
 		slog.Warn("STRIPE_SECRET_KEY is not set. Payments will fail.")
@@ -169,6 +184,11 @@ func run(logger *slog.Logger) error {
 	}
 	stripe.Key = cfg.stripe.secretKey
 	slog.Info("Stripe SDK key initialized.")
+
+	// Logic: Add a check for the eBird key.
+	if cfg.eBird.apiKey == "" {
+		slog.Warn("EBIRD_API_KEY is not set. Premium features for hotspot analysis will fail.")
+	}
 
 	slog.Info("Frontend URL for emails/redirects", "url", cfg.frontEndUrl)
 	slog.Info("Base URL for API (self-awareness)", "url", cfg.baseURL)
@@ -202,9 +222,9 @@ func run(logger *slog.Logger) error {
 	}
 	slog.Info("Mailer initialized.")
 
-	startWorkerPool(mailer, 5) // Logging for worker pool start is inside this function
+	startWorkerPool(mailer, 5)
 
-	firebaseCredsPath := env.GetString("PATH_TO_FIREBASE_CREDS", "") // Default to empty if not set
+	firebaseCredsPath := env.GetString("PATH_TO_FIREBASE_CREDS", "")
 	slog.Info("Firebase credentials path from env", "path", firebaseCredsPath)
 	if firebaseCredsPath == "" {
 		errMsg := "PATH_TO_FIREBASE_CREDS environment variable is not set. Firebase Admin SDK cannot be initialized."
@@ -235,10 +255,6 @@ func run(logger *slog.Logger) error {
 	slog.Info("JWT Token maker initialized.")
 
 	slog.Info("Initializing Cloudinary client...")
-	// CloudinaryClient's NewCloudinaryClient() will panic if keys aren't set.
-	// It's better to check env vars before calling it, or have it return an error.
-	// For now, we rely on its internal panic if keys are missing from where it loads them.
-	// (It loads CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET, CLOUDINARY_CLOUD_NAME from env)
 	cloudinaryAPIKey := env.GetString("CLOUDINARY_API_KEY", "")
 	cloudinaryAPISecret := env.GetString("CLOUDINARY_API_SECRET", "")
 	cloudinaryCloudName := env.GetString("CLOUDINARY_CLOUD_NAME", "")
@@ -246,11 +262,10 @@ func run(logger *slog.Logger) error {
 	if cloudinaryAPIKey == "" || cloudinaryAPISecret == "" || cloudinaryCloudName == "" {
 		errMsg := "Cloudinary credentials (API_KEY, API_SECRET, CLOUD_NAME) are not fully set in environment variables. Media client cannot be initialized."
 		slog.Error(errMsg)
-		// return errors.New(errMsg) // Optionally make this fatal
 	}
 
-	cldClient := mediamanager.NewCloudinaryClient() // This might panic if creds are missing
-	if cldClient == nil {                           // Should not happen if NewCloudinaryClient panics on error
+	cldClient := mediamanager.NewCloudinaryClient()
+	if cldClient == nil {
 		slog.Error("Failed to create media client (CloudinaryClient was nil after initialization attempt).")
 		return errors.New("failed to create media client")
 	}
