@@ -28,6 +28,7 @@ services:
       # Logic: Add your new ebird.env file to this list.
       # Docker Compose will now load the EBIRD_API_KEY variable into the container's environment.
       - ./env/ebird.env
+      - ./env/gemini.env
     environment:
       DB_ADDR: postgres://${DB_USER}:${DB_PASSWORD}@birdlens-db:5432/birdlens?sslmode=disable
       HTTP_PORT: 6969

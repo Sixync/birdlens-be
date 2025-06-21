@@ -78,10 +78,16 @@ func (app *application) routes() http.Handler {
 		r.With(app.getEventMiddleware).Delete("/{event_id}", app.deleteEventHandler)
 	})
 
-	// Logic: Add a new route group for hotspot-related endpoints.
 	mux.Route("/hotspots", func(r chi.Router) {
-		// This endpoint is protected by authMiddleware. The handler will perform the ExBird subscription check.
 		r.With(app.authMiddleware).Get("/{locId}/visiting-times", app.getHotspotVisitingTimesHandler)
+	})
+
+	// Logic: Add a new route group for AI-related endpoints.
+	// These endpoints are protected by authMiddleware to ensure only logged-in users can use them.
+	mux.Route("/ai", func(r chi.Router) {
+		r.Use(app.authMiddleware)
+		r.Post("/identify-bird", app.identifyBirdHandler)
+		r.Post("/ask-question", app.askAiQuestionHandler)
 	})
 
 	mux.With(app.authMiddleware).Post("/create-payment-intent", app.handleCreatePaymentIntent)
