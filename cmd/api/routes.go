@@ -83,7 +83,11 @@ func (app *application) routes() http.Handler {
 		// This endpoint is protected by authMiddleware. The handler will perform the ExBird subscription check.
 		r.With(app.authMiddleware).Get("/{locId}/visiting-times", app.getHotspotVisitingTimesHandler)
 	})
-
+	// Logic: Add a new route group for species-related data.
+	// This makes the endpoint GET /api/v1/species/{species_id}/range available.
+	mux.Route("/species", func(r chi.Router) {
+		r.With(app.authMiddleware).Get("/{species_id}/range", app.getSpeciesRangeHandler)
+	})
 	mux.With(app.authMiddleware).Post("/create-payment-intent", app.handleCreatePaymentIntent)
 	mux.Post("/stripe-webhooks", app.handleStripeWebhook) // New webhook route
 
