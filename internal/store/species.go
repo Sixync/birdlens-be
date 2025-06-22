@@ -1,57 +1,100 @@
-// birdlens-be/internal/store/species.go
 package store
 
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"encoding/json"
 	"log"
 
 	"github.com/jmoiron/sqlx"
 )
 
-// RangeData struct remains the same. It correctly handles NULL values from the database.
+// JSONNullString is a custom type that wraps sql.NullString
+// and implements both json.Marshaler and sql.Scanner interfaces
+type JSONNullString struct {
+	String string
+	Valid  bool // Valid is true if String is not NULL
+}
+
+// MarshalJSON implements the json.Marshaler interface
+func (v JSONNullString) MarshalJSON() ([]byte, error) {
+	if v.Valid {
+		return json.Marshal(v.String)
+	}
+	return json.Marshal(nil)
+}
+
+// Scan implements the sql.Scanner interface
+func (v *JSONNullString) Scan(value interface{}) error {
+	if value == nil {
+		v.String, v.Valid = "", false
+		return nil
+	}
+	
+	switch s := value.(type) {
+	case string:
+		v.String, v.Valid = s, true
+	case []byte:
+		v.String, v.Valid = string(s), true
+	default:
+		// Try to convert to string using sql.NullString
+		var ns sql.NullString
+		err := ns.Scan(value)
+		if err != nil {
+			return err
+		}
+		v.String, v.Valid = ns.String, ns.Valid
+	}
+	return nil
+}
+
+// Value implements the driver.Valuer interface
+func (v JSONNullString) Value() (driver.Value, error) {
+	if !v.Valid {
+		return nil, nil
+	}
+	return v.String, nil
+}
+
+// RangeData struct using the custom JSONNullString type
 type RangeData struct {
-	GeoJSON sql.NullString `db:"geojson" json:"geo_json"`
+	GeoJSON JSONNullString `db:"geojson" json:"geo_json"`
 }
 
 type SpeciesStore struct {
 	db *sqlx.DB
 }
 
-// Logic: The function is renamed to accurately reflect that it queries by scientific name.
-// This is much clearer than querying by 'sisrecid' which we aren't using directly from the API.
+// GetRangeByScientificName queries the species range by scientific name
 func (s *SpeciesStore) GetRangeByScientificName(ctx context.Context, scientificName string) ([]RangeData, error) {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
 	var ranges []RangeData
 
-	// Logic: The WHERE clause is updated to query the 'scientificname' column.
-	// This now perfectly matches what our handler needs to do.
+	searchPattern := "%" + scientificName + "%"
+	log.Printf("[STORE] Executing scientific name search with pattern: %s", searchPattern)
+
 	const query = `
         SELECT
             ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.005)) as geojson
         FROM
             public.species_ranges
         WHERE
-            scientificname = $1
+            TRIM(sci_name) ILIKE $1
     `
 
-	err := s.db.SelectContext(ctx, &ranges, query, scientificName)
+	err := s.db.SelectContext(ctx, &ranges, query, searchPattern)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			log.Printf("[STORE] Scientific name search found 0 rows.")
 			return []RangeData{}, nil
 		}
-		log.Printf("Error fetching species range from PostGIS for scientific name %s: %v", scientificName, err)
+		log.Printf("[STORE-ERROR] Error fetching species range by scientific name pattern '%s': %v", searchPattern, err)
 		return nil, err
 	}
 
-	var validRanges []RangeData
-	for _, r := range ranges {
-		if r.GeoJSON.Valid && r.GeoJSON.String != "" {
-			validRanges = append(validRanges, r)
-		}
-	}
-
-	return validRanges, nil
+	log.Printf("[STORE] Scientific name search found %d rows.", len(ranges))
+	return ranges, nil
 }

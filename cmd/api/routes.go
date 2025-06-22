@@ -78,15 +78,16 @@ func (app *application) routes() http.Handler {
 		r.With(app.getEventMiddleware).Delete("/{event_id}", app.deleteEventHandler)
 	})
 
-	// Logic: Add a new route group for hotspot-related endpoints.
 	mux.Route("/hotspots", func(r chi.Router) {
-		// This endpoint is protected by authMiddleware. The handler will perform the ExBird subscription check.
 		r.With(app.authMiddleware).Get("/{locId}/visiting-times", app.getHotspotVisitingTimesHandler)
 	})
-	// Logic: Add a new route group for species-related data.
-	// This makes the endpoint GET /api/v1/species/{species_id}/range available.
+	
+	// Logic: The route for species range is changed to a static path `/species/range`.
+	// The species name will be passed as a query parameter, which is more robust for names containing spaces.
+	// Old route: /species/{species_id}/range
+	// New route: /species/range
 	mux.Route("/species", func(r chi.Router) {
-		r.With(app.authMiddleware).Get("/{species_id}/range", app.getSpeciesRangeHandler)
+		r.With(app.authMiddleware).Get("/range", app.getSpeciesRangeHandler)
 	})
 	mux.With(app.authMiddleware).Post("/create-payment-intent", app.handleCreatePaymentIntent)
 	mux.Post("/stripe-webhooks", app.handleStripeWebhook) // New webhook route

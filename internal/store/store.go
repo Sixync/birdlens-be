@@ -1,3 +1,4 @@
+// birdlens-be/internal/store/store.go
 package store
 
 import (
@@ -102,8 +103,8 @@ type Storage struct {
 		Exists(ctx context.Context, userID int64, hotspotLocationID string) (bool, error)
 	}
 	Species interface {
-		// Logic: Updated the interface to match the new function name in species.go.
 		GetRangeByScientificName(ctx context.Context, scientificName string) ([]RangeData, error)
+
 	}
 }
 

@@ -6,43 +6,34 @@ import (
 	"net/http"
 
 	"github.com/sixync/birdlens-be/internal/response"
+	
 )
 
 func (app *application) getSpeciesRangeHandler(w http.ResponseWriter, r *http.Request) {
-	speciesCode := r.PathValue("species_id")
-	if speciesCode == "" {
-		app.badRequest(w, r, http.ErrNoCookie)
-		return
-	}
+	log.Println("--- /species/range HANDLER (v7 - Final Hardcoded Test) ---")
 
-	// This lookup map is a temporary bridge between eBird's speciesCode and BirdLife's scientificname.
-	// For a full solution, you would build a more robust lookup method.
-	sciNameLookup := map[string]string{
-		"aspswi1": "Cypsiurus balasiensis", // Asian Palm Swift
-		// You can add more species here for testing
-	}
+	// Logic: For this test, we are hardcoding the scientific name for "Crested Duck".
+	// The check for the query parameter has been removed, so the handler will proceed
+	// even if no parameters are sent from the client (like in your Postman test).
+	scientificNameForTest := "Lophonetta specularioides"
+	
+	log.Printf("[HANDLER-TEST] Using hardcoded scientific name: '%s'", scientificNameForTest)
 
-	scientificName, ok := sciNameLookup[speciesCode]
-	if !ok {
-		log.Printf("No scientific name mapping found for species code: %s", speciesCode)
-		app.notFound(w, r)
-		return
-	}
-
-	log.Printf("Fetching range for species: %s (Scientific Name: %s)", speciesCode, scientificName)
-
-	// Logic: This now correctly calls the clean, specific function in the store.
-	// The handler's responsibility is now much clearer.
-	speciesRanges, err := app.store.Species.GetRangeByScientificName(r.Context(), scientificName)
+	// Call the store method with our hardcoded name.
+	speciesRanges, err := app.store.Species.GetRangeByScientificName(r.Context(), scientificNameForTest)
 	if err != nil {
+		log.Printf("[HANDLER-ERROR-TEST] Store method returned an error: %v", err)
 		app.serverError(w, r, err)
 		return
 	}
+	log.Printf("[HANDLER-TEST] Database search completed, found %d polygons.", len(speciesRanges))
 
 	if len(speciesRanges) == 0 {
+		log.Printf("[HANDLER-TEST] Final result: Hardcoded query found no data. Returning 404.")
 		app.notFound(w, r)
 		return
 	}
 
-	response.JSON(w, http.StatusOK, speciesRanges, false, "Species range data retrieved successfully")
+	log.Printf("[HANDLER-TEST] Final result: Success. Returning %d polygons from hardcoded query.", len(speciesRanges))
+	response.JSON(w, http.StatusOK, speciesRanges, false, "Species range data (hardcoded test) retrieved successfully")
 }
