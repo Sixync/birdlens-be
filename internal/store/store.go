@@ -1,3 +1,4 @@
+// birdlens-be/internal/store/store.go
 package store
 
 import (
@@ -101,6 +102,10 @@ type Storage struct {
 		GetTrendingBookmarks(ctx context.Context, limit, offset int) (*PaginatedList[*Bookmark], error)
 		Exists(ctx context.Context, userID int64, hotspotLocationID string) (bool, error)
 	}
+	Species interface {
+		GetRangeByScientificName(ctx context.Context, scientificName string) ([]RangeData, error)
+
+	}
 }
 
 func NewStore(db *sqlx.DB) *Storage {
@@ -117,6 +122,7 @@ func NewStore(db *sqlx.DB) *Storage {
 		Equipments:    &EquipmentStore{db},
 		Subscriptions: &SubscriptionStore{db},
 		Bookmarks:     &BookmarksStore{db},
+		Species:       &SpeciesStore{db},
 	}
 }
 

@@ -82,6 +82,15 @@ func (app *application) routes() http.Handler {
 		r.With(app.authMiddleware).Get("/{locId}/visiting-times", app.getHotspotVisitingTimesHandler)
 	})
 
+	
+	// Logic: The route for species range is changed to a static path `/species/range`.
+	// The species name will be passed as a query parameter, which is more robust for names containing spaces.
+	// Old route: /species/{species_id}/range
+	// New route: /species/range
+	mux.Route("/species", func(r chi.Router) {
+		r.With(app.authMiddleware).Get("/range", app.getSpeciesRangeHandler)
+	})
+
 	// Logic: Add a new route group for AI-related endpoints.
 	// These endpoints are protected by authMiddleware to ensure only logged-in users can use them.
 	mux.Route("/ai", func(r chi.Router) {
@@ -89,6 +98,7 @@ func (app *application) routes() http.Handler {
 		r.Post("/identify-bird", app.identifyBirdHandler)
 		r.Post("/ask-question", app.askAiQuestionHandler)
 	})
+
 
 	mux.With(app.authMiddleware).Post("/create-payment-intent", app.handleCreatePaymentIntent)
 	mux.Post("/stripe-webhooks", app.handleStripeWebhook) // New webhook route
