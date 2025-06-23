@@ -27,6 +27,7 @@ services:
     env_file:
       - ./env/.env
       - ./env/ebird.env
+      - ./env/gemini.env
     environment:
       DB_ADDR: postgres://${DB_USER}:${DB_PASSWORD}@birdlens-db:5432/birdlens?sslmode=disable
       HTTP_PORT: 6969
