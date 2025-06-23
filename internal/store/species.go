@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"log"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -68,33 +69,84 @@ type SpeciesStore struct {
 
 // GetRangeByScientificName queries the species range by scientific name
 func (s *SpeciesStore) GetRangeByScientificName(ctx context.Context, scientificName string) ([]RangeData, error) {
-	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	// Increase timeout for complex geospatial queries
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	var ranges []RangeData
 
-	searchPattern := "%" + scientificName + "%"
-	log.Printf("[STORE] Executing scientific name search with pattern: %s", searchPattern)
+	log.Printf("[STORE] Executing scientific name search for: %s", scientificName)
 
-	const query = `
+	// Option 1: Exact match first (fastest)
+	const exactQuery = `
         SELECT
-            ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.005)) as geojson
+            ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.01)) as geojson
         FROM
             public.species_ranges
         WHERE
-            TRIM(sci_name) ILIKE $1
+            sci_name = $1
     `
 
-	err := s.db.SelectContext(ctx, &ranges, query, searchPattern)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			log.Printf("[STORE] Scientific name search found 0 rows.")
-			return []RangeData{}, nil
-		}
-		log.Printf("[STORE-ERROR] Error fetching species range by scientific name pattern '%s': %v", searchPattern, err)
+	err := s.db.SelectContext(ctx, &ranges, exactQuery, scientificName)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("[STORE-ERROR] Error in exact match query: %v", err)
 		return nil, err
 	}
 
-	log.Printf("[STORE] Scientific name search found %d rows.", len(ranges))
+	// If exact match found, return it
+	if len(ranges) > 0 {
+		log.Printf("[STORE] Exact match found %d rows.", len(ranges))
+		return ranges, nil
+	}
+
+	log.Printf("[STORE] No exact match found, trying case-insensitive search...")
+
+	// Option 2: Case-insensitive exact match
+	const iexactQuery = `
+        SELECT
+            ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.01)) as geojson
+        FROM
+            public.species_ranges
+        WHERE
+            LOWER(sci_name) = LOWER($1)
+    `
+
+	err = s.db.SelectContext(ctx, &ranges, iexactQuery, scientificName)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("[STORE-ERROR] Error in case-insensitive exact query: %v", err)
+		return nil, err
+	}
+
+	// If case-insensitive match found, return it
+	if len(ranges) > 0 {
+		log.Printf("[STORE] Case-insensitive exact match found %d rows.", len(ranges))
+		return ranges, nil
+	}
+
+	log.Printf("[STORE] No exact matches found, trying partial search...")
+
+	// Option 3: Partial match (slower, but more flexible)
+	const partialQuery = `
+        SELECT
+            ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.01)) as geojson
+        FROM
+            public.species_ranges
+        WHERE
+            sci_name ILIKE $1
+        LIMIT 100
+    `
+
+	searchPattern := "%" + scientificName + "%"
+	err = s.db.SelectContext(ctx, &ranges, partialQuery, searchPattern)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Printf("[STORE] Partial search found 0 rows.")
+			return []RangeData{}, nil
+		}
+		log.Printf("[STORE-ERROR] Error fetching species range by partial pattern '%s': %v", searchPattern, err)
+		return nil, err
+	}
+
+	log.Printf("[STORE] Partial search found %d rows.", len(ranges))
 	return ranges, nil
 }
