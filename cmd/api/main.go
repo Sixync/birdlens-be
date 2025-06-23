@@ -58,8 +58,11 @@ type config struct {
 		publishableKey string
 		webhookSecret  string
 	}
-	// Logic: Add a new struct to hold eBird-related configuration.
 	eBird struct {
+		apiKey string
+	}
+	// Logic: Add a new struct to hold the Gemini API key.
+	gemini struct {
 		apiKey string
 	}
 }
@@ -133,10 +136,14 @@ func run(logger *slog.Logger) error {
 	if errCloudinary != nil {
 		slog.Warn("Could not load /env/cloudinary.env", "error", errCloudinary)
 	}
-	// Logic: Load the new ebird.env file.
 	errEbird := godotenv.Load("/env/ebird.env")
 	if errEbird != nil {
 		slog.Warn("Could not load /env/ebird.env", "error", errEbird)
+	}
+	// Logic: Load the new gemini.env file.
+	errGemini := godotenv.Load("/env/gemini.env")
+	if errGemini != nil {
+		slog.Warn("Could not load /env/gemini.env", "error", errGemini)
 	}
 
 	cfg.httpPort = env.GetInt("HTTP_PORT", 6969)
@@ -165,29 +172,35 @@ func run(logger *slog.Logger) error {
 	cfg.stripe.publishableKey = env.GetString("STRIPE_PUBLISHABLE_KEY", "")
 	cfg.stripe.webhookSecret = env.GetString("STRIPE_WEBHOOK_SECRET", "")
 
-	// Logic: Read the EBIRD_API_KEY from the environment into the config struct.
 	cfg.eBird.apiKey = env.GetString("EBIRD_API_KEY", "")
 
-	// Log the presence of each key
+	// Logic: Read the GEMINI_API_KEY from the environment into the config struct.
+	cfg.gemini.apiKey = env.GetString("GEMINI_API_KEY", "")
+
 	slog.Info("Stripe keys loaded",
 		"secret_key_present", cfg.stripe.secretKey != "",
 		"publishable_key_present", cfg.stripe.publishableKey != "",
 		"webhook_secret_present", cfg.stripe.webhookSecret != "")
 
-	// Logic: Add a log to confirm the eBird key was loaded.
 	slog.Info("eBird API key loaded", "present", cfg.eBird.apiKey != "")
+
+	// Logic: Add a log to confirm the Gemini key was loaded.
+	slog.Info("Gemini API key loaded", "present", cfg.gemini.apiKey != "")
 
 	if cfg.stripe.secretKey == "" {
 		slog.Warn("STRIPE_SECRET_KEY is not set. Payments will fail.")
-		// Depending on strictness, you might want to return an error here:
-		// return errors.New("STRIPE_SECRET_KEY is not set")
 	}
 	stripe.Key = cfg.stripe.secretKey
 	slog.Info("Stripe SDK key initialized.")
 
-	// Logic: Add a check for the eBird key.
 	if cfg.eBird.apiKey == "" {
 		slog.Warn("EBIRD_API_KEY is not set. Premium features for hotspot analysis will fail.")
+	}
+
+	// Logic: Add a check for the Gemini key.
+	if cfg.gemini.apiKey == "" {
+		slog.Error("CRITICAL: GEMINI_API_KEY is not set. AI features will fail.")
+		return errors.New("GEMINI_API_KEY is not configured")
 	}
 
 	slog.Info("Frontend URL for emails/redirects", "url", cfg.frontEndUrl)
