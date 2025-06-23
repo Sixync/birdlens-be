@@ -1,9 +1,7 @@
 # birdlens-be/docker-compose.yml
 services:
   birdlens-db:
-    # Logic: Change the image from 'postgres:17.5' to 'postgis/postgis'.
-    # This image includes PostgreSQL and the PostGIS extension.
-    image: postgis/postgis:16-3.4
+    image:  postgres:17.5
     ports:
       - "5431:5432"
     restart: always
