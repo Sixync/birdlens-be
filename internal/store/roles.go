@@ -31,14 +31,14 @@ func (s *RoleStore) GetByID(ctx context.Context, id int64) (*Role, error) {
 }
 
 func (s *RoleStore) AddUserToRole(ctx context.Context, userID int64, roleName string) error {
-	roleIdQuery := "SELECT id FROM roles WHERE name = ?"
+	roleIdQuery := "SELECT id FROM roles WHERE name = $1;"
 	var roleID int64
 	err := s.db.GetContext(ctx, &roleID, roleIdQuery, roleName)
 	if err != nil {
 		return err
 	}
 
-	query := "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)"
+	query := "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2);"
 	_, err = s.db.ExecContext(ctx, query, userID, roleID)
 	if err != nil {
 		return err
