@@ -104,7 +104,11 @@ type Storage struct {
 	}
 	Species interface {
 		GetRangeByScientificName(ctx context.Context, scientificName string) ([]RangeData, error)
+	}
 
+	Roles interface {
+		GetByID(ctx context.Context, id int64) (*Role, error)
+		AddUserToRole(ctx context.Context, userID int64, roleName string) error
 	}
 }
 
@@ -123,6 +127,7 @@ func NewStore(db *sqlx.DB) *Storage {
 		Subscriptions: &SubscriptionStore{db},
 		Bookmarks:     &BookmarksStore{db},
 		Species:       &SpeciesStore{db},
+		Roles:         &RoleStore{db},
 	}
 }
 
@@ -156,3 +161,4 @@ func NewPaginatedList[T any](items []T, totalCount, limit, offset int) (*Paginat
 		TotalPages: totalPages,
 	}, nil
 }
+

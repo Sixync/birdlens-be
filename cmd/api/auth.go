@@ -132,6 +132,13 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	err = app.store.Roles.AddUserToRole(ctx, userId, store.USER)
+	if err != nil {
+		app.logger.Error("Error adding user to role during registration", "user_id", userId, "error", err)
+		app.serverError(w, r, err)
+		return
+	}
+
 	emailToken, err := app.tokenMaker.CreateRandomToken()
 	if err != nil {
 		app.serverError(w, r, err)
@@ -529,3 +536,4 @@ type HtmlPageData struct {
 	Title   string
 	Message string
 }
+
