@@ -19,7 +19,10 @@ func (app *application) routes() http.Handler {
 	mux.Use(app.recoverPanic)
 
 	mux.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"https-birdlens.netlify.app", "http://localhost:5173"},
+		// Logic: The origin 'https-birdlens.netlify.app' was missing '://'.
+		// The correct format requires the full protocol, which is 'https://'.
+		// This change allows requests from your Netlify frontend to be accepted by the backend.
+		AllowedOrigins:   []string{"https://birdlens.netlify.app", "http://localhost:5173"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
@@ -83,7 +86,7 @@ func (app *application) routes() http.Handler {
 	})
 
 	
-	// Logic: The route for species range is changed to a static path `/species/range`.
+	// The route for species range is changed to a static path `/species/range`.
 	// The species name will be passed as a query parameter, which is more robust for names containing spaces.
 	// Old route: /species/{species_id}/range
 	// New route: /species/range
@@ -91,7 +94,7 @@ func (app *application) routes() http.Handler {
 		r.With(app.authMiddleware).Get("/range", app.getSpeciesRangeHandler)
 	})
 
-	// Logic: Add a new route group for AI-related endpoints.
+	// Add a new route group for AI-related endpoints.
 	// These endpoints are protected by authMiddleware to ensure only logged-in users can use them.
 	mux.Route("/ai", func(r chi.Router) {
 		r.Use(app.authMiddleware)
