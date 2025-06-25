@@ -23,6 +23,7 @@ type Post struct {
 	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt     *time.Time `json:"updated_at" db:"updated_at"`
 	ReactionCount int        `json:"reaction_count" db:"reaction_count"`
+	UserId        int64      `json:"user_id" db:"user_id"`
 }
 
 type PostReaction struct {
@@ -351,6 +352,47 @@ func (s *PostStore) GetTrendingPosts(ctx context.Context, duration time.Time, li
     LIMIT $2 OFFSET $3;
   `
 	err = s.db.SelectContext(ctx, &posts, query, duration, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewPaginatedList(posts, int(totalCount), limit, offset)
+}
+
+func (s *PostStore) GetFollowerPosts(ctx context.Context, userId int64, limit, offset int) (*PaginatedList[*Post], error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	if limit <= 0 || limit > 100 {
+		return nil, errors.New("limit must be between 1 and 100")
+	}
+	if offset < 0 {
+		return nil, errors.New("offset cannot be negative")
+	}
+
+	var totalCount int64
+	countQuery := `
+    SELECT COUNT(*) 
+    FROM posts p 
+    JOIN followers f ON p.user_id = f.follower_id
+    WHERE f.user_id = $1;
+  `
+	err := s.db.GetContext(ctx, &totalCount, countQuery, userId)
+	if err != nil {
+		return nil, err
+	}
+
+	var posts []*Post
+	query := `
+    SELECT p.id, p.content, p.location_name, p.latitude, p.longitude, p.privacy_level, p.type, p.is_featured, p.created_at, p.updated_at, p.user_id 
+    FROM posts p 
+    JOIN followers f ON p.user_id = f.follower_id 
+    WHERE f.user_id = $1 
+    ORDER BY p.created_at DESC 
+    LIMIT $2 OFFSET $3;
+  `
+
+	err = s.db.SelectContext(ctx, &posts, query, userId, limit, offset)
 	if err != nil {
 		return nil, err
 	}
