@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	services "github.com/sixync/birdlens-be/cmd/services/posts"
 	"github.com/sixync/birdlens-be/internal/response"
 	"github.com/sixync/birdlens-be/internal/store"
 )
@@ -39,14 +40,25 @@ func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	postType := r.URL.Query().Get("type")
+	// durationStr := r.URL.Query().Get("duration")
+	// durationInt, err := strconv.ParseInt(durationStr, 10, 64)
+	// if err != nil {
+	// 	durationInt = 7
+	// }
+
+	postRetrievalStrategy := app.getPostRetrievalStrategy(postType)
+
 	ctx := r.Context()
 
 	limit, offset := getPaginateFromCtx(r)
-	posts, err := app.store.Posts.GetAll(ctx, limit, offset)
+	posts, err := postRetrievalStrategy.RetrievePosts(ctx, currentUser.Id, limit, offset)
 	if err != nil {
 		app.serverError(w, r, err)
 		return
 	}
+
+	log.Println("posts retrieved from db", posts)
 
 	log.Println("user from claims", currentUser)
 	log.Println("posts from db", posts)
@@ -301,4 +313,19 @@ func (app *application) getPostFromCtx(r *http.Request) *store.Post {
 		return nil
 	}
 	return post
+}
+
+func (app *application) getPostRetrievalStrategy(strategy string) services.PostRetriever {
+	var postRetrievalStrategy services.PostRetriever
+	switch strategy {
+	case "trending":
+		postRetrievalStrategy = services.NewTrendingPostRetriever(app.store)
+
+	case "all":
+		postRetrievalStrategy = services.NewAllPostRetriever(app.store)
+	default:
+		postRetrievalStrategy = services.NewAllPostRetriever(app.store)
+	}
+
+	return postRetrievalStrategy
 }

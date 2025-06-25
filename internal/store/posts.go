@@ -12,16 +12,17 @@ import (
 
 // Post represents a post entity
 type Post struct {
-	Id           int64      `json:"id" db:"id"`
-	Content      string     `json:"content" db:"content"`
-	LocationName string     `json:"location_name" db:"location_name"`
-	Latitude     float64    `json:"latitude" db:"latitude"`
-	Longitude    float64    `json:"longitude" db:"longitude"`
-	PrivacyLevel string     `json:"privacy_level" db:"privacy_level"`
-	Type         string     `json:"type" db:"type"`
-	IsFeatured   bool       `json:"is_featured" db:"is_featured"`
-	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt    *time.Time `json:"updated_at" db:"updated_at"`
+	Id            int64      `json:"id" db:"id"`
+	Content       string     `json:"content" db:"content"`
+	LocationName  string     `json:"location_name" db:"location_name"`
+	Latitude      float64    `json:"latitude" db:"latitude"`
+	Longitude     float64    `json:"longitude" db:"longitude"`
+	PrivacyLevel  string     `json:"privacy_level" db:"privacy_level"`
+	Type          string     `json:"type" db:"type"`
+	IsFeatured    bool       `json:"is_featured" db:"is_featured"`
+	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt     *time.Time `json:"updated_at" db:"updated_at"`
+	ReactionCount int        `json:"reaction_count" db:"reaction_count"`
 }
 
 type PostReaction struct {
@@ -305,4 +306,54 @@ func (s *PostStore) AddMediaUrl(ctx context.Context, postId int64, mediaUrl stri
 	}
 
 	return nil
+}
+
+func (s *PostStore) GetTrendingPosts(ctx context.Context, duration time.Time, limit, offset int) (*PaginatedList[*Post], error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	if limit <= 0 || limit > 100 {
+		return nil, errors.New("limit must be between 1 and 100")
+	}
+	if offset < 0 {
+		return nil, errors.New("offset cannot be negative")
+	}
+
+	var totalCount int64
+	countQuery := `
+    SELECT COUNT(*) 
+    FROM posts 
+    WHERE created_at >= $1`
+	err := s.db.GetContext(ctx, &totalCount, countQuery, duration)
+	if err != nil {
+		return nil, err
+	}
+
+	var posts []*Post
+	query := `
+    SELECT 
+        p.id, 
+        p.content, 
+        p.location_name, 
+        p.latitude, 
+        p.longitude, 
+        p.privacy_level, 
+        p.type, 
+        p.is_featured, 
+        p.created_at, 
+        p.updated_at,
+        COALESCE(COUNT(pr.reaction_type), 0) AS reaction_count
+    FROM posts p 
+    LEFT JOIN post_reactions pr ON p.id = pr.post_id 
+    WHERE p.created_at >= $1 
+    GROUP BY p.id, p.content, p.location_name, p.latitude, p.longitude, p.privacy_level, p.type, p.is_featured, p.created_at, p.updated_at
+    ORDER BY reaction_count DESC
+    LIMIT $2 OFFSET $3;
+  `
+	err = s.db.SelectContext(ctx, &posts, query, duration, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewPaginatedList(posts, int(totalCount), limit, offset)
 }

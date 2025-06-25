@@ -43,6 +43,7 @@ type Storage struct {
 		UserLiked(ctx context.Context, userId, postId int64) (bool, error)
 		AddUserReaction(ctx context.Context, userId, postId int64, reactionType string) error
 		AddMediaUrl(ctx context.Context, postId int64, mediaUrls string) error
+		GetTrendingPosts(ctx context.Context, duration time.Time, limit, offset int) (*PaginatedList[*Post], error)
 	}
 	Followers interface {
 		Create(ctx context.Context, follower *Follower) error
