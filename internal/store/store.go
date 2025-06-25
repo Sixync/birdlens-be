@@ -44,6 +44,7 @@ type Storage struct {
 		AddUserReaction(ctx context.Context, userId, postId int64, reactionType string) error
 		AddMediaUrl(ctx context.Context, postId int64, mediaUrls string) error
 		GetTrendingPosts(ctx context.Context, duration time.Time, limit, offset int) (*PaginatedList[*Post], error)
+		GetFollowerPosts(ctx context.Context, userId int64, limit, offset int) (*PaginatedList[*Post], error)
 	}
 	Followers interface {
 		Create(ctx context.Context, follower *Follower) error
@@ -162,4 +163,3 @@ func NewPaginatedList[T any](items []T, totalCount, limit, offset int) (*Paginat
 		TotalPages: totalPages,
 	}, nil
 }
-

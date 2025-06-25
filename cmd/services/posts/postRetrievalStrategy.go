@@ -51,3 +51,21 @@ func (r *allPostRetriever) RetrievePosts(ctx context.Context, userId int64, limi
 
 	return posts, nil
 }
+
+type followerPostsRetriever struct {
+	store *store.Storage
+}
+
+func NewFollowerPostsRetriever(store *store.Storage) *followerPostsRetriever {
+	return &followerPostsRetriever{
+		store: store,
+	}
+}
+
+func (r *followerPostsRetriever) RetrievePosts(ctx context.Context, userId int64, limit, offset int) (*store.PaginatedList[*store.Post], error) {
+	posts, err := r.store.Posts.GetFollowerPosts(ctx, userId, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	return posts, nil
+}
