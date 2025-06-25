@@ -41,11 +41,6 @@ func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	postType := r.URL.Query().Get("type")
-	// durationStr := r.URL.Query().Get("duration")
-	// durationInt, err := strconv.ParseInt(durationStr, 10, 64)
-	// if err != nil {
-	// 	durationInt = 7
-	// }
 
 	postRetrievalStrategy := app.getPostRetrievalStrategy(postType)
 
@@ -69,8 +64,15 @@ func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) 
 		var postResponse PostResponse
 
 		postResponse.ID = post.Id // them cai id nay vo
-		postResponse.PosterAvatarUrl = currentUser.AvatarUrl
-		postResponse.PosterName = currentUser.Username
+		// TODO: poster info
+		poster, err := app.store.Users.GetById(ctx, post.UserId)
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+
+		postResponse.PosterAvatarUrl = poster.AvatarUrl
+		postResponse.PosterName = poster.Username
 		postResponse.CreatedAt = post.CreatedAt
 		postResponse.Content = post.Content
 		likes, err := app.store.Posts.GetLikeCounts(ctx, post.Id)
@@ -320,9 +322,10 @@ func (app *application) getPostRetrievalStrategy(strategy string) services.PostR
 	switch strategy {
 	case "trending":
 		postRetrievalStrategy = services.NewTrendingPostRetriever(app.store)
-
 	case "all":
 		postRetrievalStrategy = services.NewAllPostRetriever(app.store)
+	case "follower":
+		postRetrievalStrategy = services.NewFollowerPostsRetriever(app.store)
 	default:
 		postRetrievalStrategy = services.NewAllPostRetriever(app.store)
 	}
