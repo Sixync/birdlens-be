@@ -1,4 +1,5 @@
 // path: birdlens-be/cmd/api/payments_payos.go
+// (complete file content here)
 package main
 
 import (
@@ -73,6 +74,7 @@ type PayOSWebhookData struct {
 	Signature string `json:"signature"`
 }
 
+// The handler to create the payment link remains unchanged as it was correct.
 func (app *application) createPayOSPaymentLinkHandler(w http.ResponseWriter, r *http.Request) {
 	user := app.getUserFromFirebaseClaimsCtx(r)
 	if user == nil {
@@ -92,14 +94,10 @@ func (app *application) createPayOSPaymentLinkHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	// For PayOS, we use a fixed amount in VND.
-	// 20,000 VND for the ExBird subscription.
 	orderAmount := int64(20000)
 
-	// Create a unique order code for PayOS (must be an integer).
 	orderCode := time.Now().UnixNano() / int64(time.Millisecond)
 
-	// 1. Create a new order in our database with status "PENDING"
 	newOrder := &store.Order{
 		UserID:         user.Id,
 		SubscriptionID: exBirdSubscription.ID,
@@ -117,7 +115,6 @@ func (app *application) createPayOSPaymentLinkHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	// 2. Prepare the request to send to PayOS API
 	payOSReq := &PayOSRequestData{
 		OrderCode:   orderCode,
 		Amount:      orderAmount,
@@ -130,12 +127,10 @@ func (app *application) createPayOSPaymentLinkHandler(w http.ResponseWriter, r *
 		ExpiredAt:   time.Now().Add(15 * time.Minute).Unix(),
 	}
 
-	// 3. Create the signature for the request
 	signatureData := fmt.Sprintf("amount=%d&cancelUrl=%s&description=%s&orderCode=%d&returnUrl=%s",
 		payOSReq.Amount, payOSReq.CancelUrl, payOSReq.Description, payOSReq.OrderCode, payOSReq.ReturnUrl)
 	payOSReq.Signature = createPayOSSignature(signatureData, app.config.payos.checksumKey)
 
-	// 4. Send the request to PayOS
 	reqBodyBytes, _ := json.Marshal(payOSReq)
 	payOSApiUrl := "https://api-merchant.payos.vn/v2/payment-requests"
 
@@ -175,37 +170,50 @@ func (app *application) createPayOSPaymentLinkHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	// 5. Return the checkoutUrl to the Android client
 	response.JSON(w, http.StatusOK, map[string]string{"checkoutUrl": payOSResponse.Data.CheckoutURL}, false, "Payment link created")
 }
 
+// Logic: This handler is refactored to use a more robust signature verification method.
 func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Request) {
-	var webhookReq PayOSWebhookData
-	if err := json.NewDecoder(r.Body).Decode(&webhookReq); err != nil {
-		app.logger.Error("Failed to decode PayOS webhook body", "error", err)
-		app.badRequest(w, r, errors.New("invalid webhook payload"))
-		return
-	}
+    // Read the raw body first
+    bodyBytes, err := io.ReadAll(r.Body)
+    if err != nil {
+        app.logger.Error("Failed to read PayOS webhook body", "error", err)
+        app.badRequest(w, r, errors.New("cannot read webhook body"))
+        return
+    }
 
+    // Now decode it into our struct
+    var webhookReq PayOSWebhookData
+    if err := json.Unmarshal(bodyBytes, &webhookReq); err != nil {
+        app.logger.Error("Failed to decode PayOS webhook body", "error", err)
+        app.badRequest(w, r, errors.New("invalid webhook payload"))
+        return
+    }
+
+    // Verify signature using the raw body
+    if !verifyPayOSSignature(bodyBytes, app.config.payos.checksumKey) {
+        // Use the order code from the decoded struct for logging, even if signature fails
+        var orderCodeForLog int64
+        if webhookReq.Data != nil {
+            orderCodeForLog = webhookReq.Data.OrderCode
+        }
+        app.logger.Warn("Invalid PayOS webhook signature received", "orderCode", orderCodeForLog)
+        app.errorMessage(w, r, http.StatusUnauthorized, "Invalid signature", nil)
+        return
+    }
+    
+    // At this point, the signature is valid. We can trust the data.
 	if webhookReq.Data == nil {
-		app.logger.Error("PayOS webhook payload is missing 'data' object")
+		app.logger.Error("PayOS webhook payload is missing 'data' object despite valid signature")
 		app.badRequest(w, r, errors.New("invalid webhook payload: missing data"))
 		return
 	}
 
-	// 1. Verify the signature to ensure the webhook is from PayOS
-	if !verifyPayOSSignature(webhookReq, app.config.payos.checksumKey) {
-		app.logger.Warn("Invalid PayOS webhook signature received", "orderCode", webhookReq.Data.OrderCode)
-		app.errorMessage(w, r, http.StatusUnauthorized, "Invalid signature", nil)
-		return
-	}
-
-	// 2. Process the webhook based on the payment code
 	if webhookReq.Code == "00" { // "00" means PAID
 		gatewayOrderID := strconv.FormatInt(webhookReq.Data.OrderCode, 10)
 		slog.Info("Received successful PayOS payment webhook", "gateway_order_id", gatewayOrderID, "amount", webhookReq.Data.Amount)
 
-		// 3. Find the order in our database
 		order, err := app.store.Orders.GetByGatewayOrderID(r.Context(), gatewayOrderID)
 		if err != nil {
 			app.logger.Error("PayOS webhook: order not found in DB", "gateway_order_id", gatewayOrderID, "error", err)
@@ -213,7 +221,6 @@ func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		// 4. If the order is PENDING, update it to PAID and grant the subscription
 		if order.Status == store.OrderStatusPending {
 			err = app.store.Orders.UpdateStatus(r.Context(), order.ID, store.OrderStatusPaid)
 			if err != nil {
@@ -222,7 +229,6 @@ func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Reques
 				return
 			}
 
-			// Grant the user their subscription
 			err = app.store.Users.GrantSubscriptionForOrder(r.Context(), order.UserID, order.SubscriptionID)
 			if err != nil {
 				app.logger.Error("Failed to grant subscription after PAID webhook", "orderID", order.ID, "userID", order.UserID, "error", err)
@@ -240,46 +246,57 @@ func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 }
 
-// --- Helper Functions for PayOS ---
-
 func createPayOSSignature(data string, secretKey string) string {
 	h := hmac.New(sha256.New, []byte(secretKey))
 	h.Write([]byte(data))
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func verifyPayOSSignature(webhookData PayOSWebhookData, checksumKey string) bool {
-	var dataAsMap map[string]interface{}
-	dataBytes, err := json.Marshal(webhookData.Data)
-	if err != nil {
-		slog.Error("Failed to marshal webhook data for signature verification", "error", err)
-		return false
-	}
-	json.Unmarshal(dataBytes, &dataAsMap)
+// Logic: This is the new, more robust verification function. It works directly
+// on the raw JSON payload to avoid issues with Go's struct zero-values.
+func verifyPayOSSignature(rawBody []byte, checksumKey string) bool {
+    var webhookContent map[string]interface{}
+    if err := json.Unmarshal(rawBody, &webhookContent); err != nil {
+        slog.Error("verifyPayOSSignature: Failed to unmarshal raw body", "error", err)
+        return false
+    }
 
-	var keys []string
-	for k := range dataAsMap {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+    // Extract the signature and the data object
+    providedSignature, sigOk := webhookContent["signature"].(string)
+    dataObj, dataOk := webhookContent["data"].(map[string]interface{})
+    if !sigOk || !dataOk {
+        slog.Error("verifyPayOSSignature: 'signature' or 'data' field is missing or has wrong type")
+        return false
+    }
 
-	var dataBuilder strings.Builder
-	for i, k := range keys {
-		if i > 0 {
-			dataBuilder.WriteString("&")
-		}
-		var valueStr string
-		switch v := dataAsMap[k].(type) {
-		case float64:
-			valueStr = strconv.FormatInt(int64(v), 10)
-		default:
-			valueStr = fmt.Sprintf("%v", v)
-		}
-		dataBuilder.WriteString(fmt.Sprintf("%s=%s", k, valueStr))
-	}
-	dataString := dataBuilder.String()
+    // Sort the keys of the data object
+    var keys []string
+    for k := range dataObj {
+        keys = append(keys, k)
+    }
+    sort.Strings(keys)
 
-	expectedSignature := createPayOSSignature(dataString, checksumKey)
+    // Build the data string for signing
+    var dataBuilder strings.Builder
+    for i, k := range keys {
+        if i > 0 {
+            dataBuilder.WriteString("&")
+        }
+        var valueStr string
+        switch v := dataObj[k].(type) {
+        // JSON unmarshals numbers into float64 by default
+        case float64:
+            valueStr = strconv.FormatInt(int64(v), 10)
+        default:
+            valueStr = fmt.Sprintf("%v", v)
+        }
+        dataBuilder.WriteString(fmt.Sprintf("%s=%s", k, valueStr))
+    }
+    dataStringToSign := dataBuilder.String()
 
-	return hmac.Equal([]byte(webhookData.Signature), []byte(expectedSignature))
+    // Create the expected signature
+    expectedSignature := createPayOSSignature(dataStringToSign, checksumKey)
+    
+    // Compare securely
+    return hmac.Equal([]byte(providedSignature), []byte(expectedSignature))
 }
