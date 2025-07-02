@@ -14,6 +14,14 @@ services:
       POSTGRES_DB: birdlens
     volumes:
       - db-data:/var/lib/postgresql/data
+    # Logic: The healthcheck command is updated to use the standard environment variables
+    # that exist *inside* the PostgreSQL container ($POSTGRES_USER). This is more
+    # reliable than relying on Docker Compose's substitution from the host.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     networks:
       - birdlens-network
 
@@ -22,7 +30,8 @@ services:
       context: ./
       dockerfile: Dockerfile
     depends_on:
-      - birdlens-db
+      birdlens-db:
+        condition: service_healthy
     restart: always
     env_file:
       - ./env/.env
@@ -55,7 +64,8 @@ services:
         "up",
       ]
     depends_on: 
-      - birdlens-db
+      birdlens-db:
+        condition: service_healthy
     networks:
       - birdlens-network
 

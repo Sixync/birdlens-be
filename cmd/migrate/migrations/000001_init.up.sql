@@ -1,3 +1,4 @@
+-- birdlens-be/cmd/migrate/migrations/000001_init.up.sql
 CREATE EXTENSION IF NOT EXISTS citext;
 
 CREATE TABLE IF NOT EXISTS users (
@@ -28,9 +29,12 @@ CREATE TABLE location (
   name TEXT NOT NULL
 );
 
+-- Logic: Added a UNIQUE constraint to the 'name' column. This is required for the
+-- 'ON CONFLICT (name)' clause to work in the seed migration. It also enforces
+-- the business rule that role names must be unique.
 CREATE TABLE roles (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  name VARCHAR(50) NOT NULL
+  name VARCHAR(50) UNIQUE NOT NULL
 );
 
 CREATE TABLE categories (

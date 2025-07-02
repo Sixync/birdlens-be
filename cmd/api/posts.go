@@ -21,7 +21,7 @@ import (
 var PostKey key = "post"
 
 type PostResponse struct {
-	ID              int64     `json:"id"` // them post id cho cai may cai comment con get nua
+	ID              int64     `json:"id"`
 	PosterAvatarUrl *string   `json:"poster_avatar_url"`
 	PosterName      string    `json:"poster_name"`
 	CreatedAt       time.Time `json:"created_at"`
@@ -63,8 +63,10 @@ func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) 
 	for _, post := range posts.Items {
 		var postResponse PostResponse
 
-		postResponse.ID = post.Id // them cai id nay vo
-		// TODO: poster info
+		postResponse.ID = post.Id
+		// Logic: This query for the poster was failing with "sql: no rows in result set"
+		// because the user_id on the post was 0. The fix in createPostHandler
+		// ensures post.UserId is now a valid, existing user ID.
 		poster, err := app.store.Users.GetById(ctx, post.UserId)
 		if err != nil {
 			app.serverError(w, r, err)
@@ -113,8 +115,6 @@ func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	log.Println("post responses", postResponses)
-
-	// transform to postResponse
 
 	response.JSON(w, http.StatusOK, res, false, "get successful")
 }
@@ -174,6 +174,10 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 	post.PrivacyLevel = r.FormValue("privacy_level")
 	post.Type = r.FormValue("type")
 	post.IsFeatured = r.FormValue("is_featured") == "true"
+
+	// Logic: Associate the post with the currently authenticated user.
+	// This was the missing step causing the user_id to be 0.
+	post.UserId = currentUser.Id
 
 	log.Println("post is", post)
 

@@ -55,11 +55,11 @@ func (s *PostStore) Create(ctx context.Context, post *Post) error {
 	defer cancel()
 
 	query := `
-    INSERT INTO posts (content, location_name, latitude, longitude, privacy_level, type, is_featured)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    INSERT INTO posts (user_id, content, location_name, latitude, longitude, privacy_level, type, is_featured)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING id, created_at`
 
-	err := s.db.QueryRowContext(ctx, query, post.Content, post.LocationName, post.Latitude, post.Longitude, post.PrivacyLevel, post.Type, post.IsFeatured).Scan(&post.Id, &post.CreatedAt)
+	err := s.db.QueryRowContext(ctx, query, post.UserId, post.Content, post.LocationName, post.Latitude, post.Longitude, post.PrivacyLevel, post.Type, post.IsFeatured).Scan(&post.Id, &post.CreatedAt)
 	if err != nil {
 		log.Println("Create post error", err)
 		return err
@@ -331,9 +331,13 @@ func (s *PostStore) GetTrendingPosts(ctx context.Context, duration time.Time, li
 	}
 
 	var posts []*Post
+	// Logic: The p.user_id column was missing from the SELECT and GROUP BY clauses.
+	// This caused the post struct to have a user ID of 0, leading to a "no rows in result set"
+	// error when fetching the user details in the handler. It has now been added.
 	query := `
     SELECT 
         p.id, 
+        p.user_id,
         p.content, 
         p.location_name, 
         p.latitude, 
@@ -347,7 +351,7 @@ func (s *PostStore) GetTrendingPosts(ctx context.Context, duration time.Time, li
     FROM posts p 
     LEFT JOIN post_reactions pr ON p.id = pr.post_id 
     WHERE p.created_at >= $1 
-    GROUP BY p.id, p.content, p.location_name, p.latitude, p.longitude, p.privacy_level, p.type, p.is_featured, p.created_at, p.updated_at
+    GROUP BY p.id, p.user_id, p.content, p.location_name, p.latitude, p.longitude, p.privacy_level, p.type, p.is_featured, p.created_at, p.updated_at
     ORDER BY reaction_count DESC
     LIMIT $2 OFFSET $3;
   `
