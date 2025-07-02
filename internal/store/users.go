@@ -1,3 +1,4 @@
+
 package store
 
 import (
@@ -339,4 +340,32 @@ func (s *UserStore) GetUserByResetPasswordToken(ctx context.Context, token strin
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (s *UserStore) GrantSubscriptionForOrder(ctx context.Context, userID int64, subscriptionID int64) error {
+	var subDurationDays int
+	subQuery := `SELECT duration_days FROM subscriptions WHERE id = $1`
+	err := s.db.GetContext(ctx, &subDurationDays, subQuery, subscriptionID)
+	if err != nil {
+		return fmt.Errorf("failed to get subscription duration: %w", err)
+	}
+
+	periodEnd := time.Now().AddDate(0, 0, subDurationDays)
+
+	query := `
+		UPDATE users
+		SET
+			subscription_id = $1,
+			stripe_subscription_status = 'active', 
+			stripe_subscription_period_end = $2,
+			updated_at = NOW()
+		WHERE id = $3`
+
+	_, err = s.db.ExecContext(ctx, query, subscriptionID, periodEnd, userID)
+	if err != nil {
+		log.Printf("Error updating user subscription for user ID %d: %v", userID, err)
+		return err
+	}
+	log.Printf("Successfully granted subscription for user ID %d (Sub ID: %d)", userID, subscriptionID)
+	return nil
 }

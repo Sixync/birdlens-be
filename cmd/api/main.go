@@ -1,4 +1,3 @@
-// birdlens-be/cmd/api/main.go
 package main
 
 import (
@@ -61,9 +60,14 @@ type config struct {
 	eBird struct {
 		apiKey string
 	}
-	// Logic: Add a new struct to hold the Gemini API key.
 	gemini struct {
 		apiKey string
+	}
+	// Logic: Add a new struct to hold PayOS credentials.
+	payos struct {
+		clientID    string
+		apiKey      string
+		checksumKey string
 	}
 }
 
@@ -140,10 +144,14 @@ func run(logger *slog.Logger) error {
 	if errEbird != nil {
 		slog.Warn("Could not load /env/ebird.env", "error", errEbird)
 	}
-	// Logic: Load the new gemini.env file.
 	errGemini := godotenv.Load("/env/gemini.env")
 	if errGemini != nil {
 		slog.Warn("Could not load /env/gemini.env", "error", errGemini)
+	}
+	// Logic: Load the new payos.env file.
+	errPayOS := godotenv.Load("/env/payos.env")
+	if errPayOS != nil {
+		slog.Warn("Could not load /env/payos.env", "error", errPayOS)
 	}
 
 	cfg.httpPort = env.GetInt("HTTP_PORT", 6969)
@@ -174,8 +182,11 @@ func run(logger *slog.Logger) error {
 
 	cfg.eBird.apiKey = env.GetString("EBIRD_API_KEY", "")
 
-	// Logic: Read the GEMINI_API_KEY from the environment into the config struct.
 	cfg.gemini.apiKey = env.GetString("GEMINI_API_KEY", "")
+	// Logic: Read the PayOS keys from the environment into the config struct.
+	cfg.payos.clientID = env.GetString("PAYOS_CLIENT_ID", "")
+	cfg.payos.apiKey = env.GetString("PAYOS_API_KEY", "")
+	cfg.payos.checksumKey = env.GetString("PAYOS_CHECKSUM_KEY", "")
 
 	slog.Info("Stripe keys loaded",
 		"secret_key_present", cfg.stripe.secretKey != "",
@@ -184,7 +195,6 @@ func run(logger *slog.Logger) error {
 
 	slog.Info("eBird API key loaded", "present", cfg.eBird.apiKey != "")
 
-	// Logic: Add a log to confirm the Gemini key was loaded.
 	slog.Info("Gemini API key loaded", "present", cfg.gemini.apiKey != "")
 
 	if cfg.stripe.secretKey == "" {
@@ -197,11 +207,18 @@ func run(logger *slog.Logger) error {
 		slog.Warn("EBIRD_API_KEY is not set. Premium features for hotspot analysis will fail.")
 	}
 
-	// Logic: Add a check for the Gemini key.
 	if cfg.gemini.apiKey == "" {
 		slog.Error("CRITICAL: GEMINI_API_KEY is not set. AI features will fail.")
 		return errors.New("GEMINI_API_KEY is not configured")
 	}
+
+	// Logic: Add a check for the PayOS keys.
+	if cfg.payos.clientID == "" || cfg.payos.apiKey == "" || cfg.payos.checksumKey == "" {
+		slog.Error("CRITICAL: PayOS credentials are not fully configured. PayOS payments will fail.")
+		return errors.New("PAYOS_CLIENT_ID, PAYOS_API_KEY, or PAYOS_CHECKSUM_KEY are not configured")
+	}
+
+	slog.Info("PayOS credentials loaded", "clientID_present", cfg.payos.clientID != "")
 
 	slog.Info("Frontend URL for emails/redirects", "url", cfg.frontEndUrl)
 	slog.Info("Base URL for API (self-awareness)", "url", cfg.baseURL)

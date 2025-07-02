@@ -1,4 +1,3 @@
-// birdlens-be/internal/store/store.go
 package store
 
 import (
@@ -30,6 +29,7 @@ type Storage struct {
 		GetSubscriptionByName(ctx context.Context, name string) (*Subscription, error)
 		AddResetPasswordToken(ctx context.Context, email string, token string, expiresAt time.Time) error
 		GetUserByResetPasswordToken(ctx context.Context, token string) (*User, error)
+		GrantSubscriptionForOrder(ctx context.Context, userID int64, subscriptionID int64) error
 	}
 	Posts interface {
 		Create(context.Context, *Post) error
@@ -107,10 +107,14 @@ type Storage struct {
 	Species interface {
 		GetRangeByScientificName(ctx context.Context, scientificName string) ([]RangeData, error)
 	}
-
 	Roles interface {
 		GetByID(ctx context.Context, id int64) (*Role, error)
 		AddUserToRole(ctx context.Context, userID int64, roleName string) error
+	}
+	Orders interface {
+		Create(ctx context.Context, order *Order) error
+		GetByGatewayOrderID(ctx context.Context, gatewayOrderID string) (*Order, error)
+		UpdateStatus(ctx context.Context, id int64, status string) error
 	}
 }
 
@@ -130,6 +134,7 @@ func NewStore(db *sqlx.DB) *Storage {
 		Bookmarks:     &BookmarksStore{db},
 		Species:       &SpeciesStore{db},
 		Roles:         &RoleStore{db},
+		Orders:        &OrderStore{db},
 	}
 }
 

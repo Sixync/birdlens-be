@@ -1,4 +1,5 @@
-// birdlens-be/cmd/api/routes.go
+// path: birdlens-be/cmd/api/routes.go
+// (complete file content here - full imports, package names, all code)
 package main
 
 import (
@@ -19,15 +20,12 @@ func (app *application) routes() http.Handler {
 	mux.Use(app.recoverPanic)
 
 	mux.Use(cors.Handler(cors.Options{
-		// Logic: The origin 'https-birdlens.netlify.app' was missing '://'.
-		// The correct format requires the full protocol, which is 'https://'.
-		// This change allows requests from your Netlify frontend to be accepted by the backend.
 		AllowedOrigins:   []string{"https://birdlens.netlify.app", "http://localhost:5173"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true, // Set to true to allow authenticated requests.
-		MaxAge:           300,  // Maximum value not ignored by any major browsers
+		AllowCredentials: true,
+		MaxAge:           300,
 	}))
 	mux.Route("/posts", func(r chi.Router) {
 		r.With(app.authMiddleware).With(app.paginate).Get("/", app.getPostsHandler)
@@ -70,7 +68,6 @@ func (app *application) routes() http.Handler {
 
 	mux.Route("/subscriptions", func(r chi.Router) {
 		r.Get("/", app.getSubscriptionsHandler)
-		// Creating subscriptions should likely be an admin-only or controlled operation
 		r.Post("/", app.createSubscriptionHandler)
 	})
 
@@ -85,26 +82,22 @@ func (app *application) routes() http.Handler {
 		r.With(app.authMiddleware).Get("/{locId}/visiting-times", app.getHotspotVisitingTimesHandler)
 	})
 
-	
-	// The route for species range is changed to a static path `/species/range`.
-	// The species name will be passed as a query parameter, which is more robust for names containing spaces.
-	// Old route: /species/{species_id}/range
-	// New route: /species/range
 	mux.Route("/species", func(r chi.Router) {
 		r.With(app.authMiddleware).Get("/range", app.getSpeciesRangeHandler)
 	})
 
-	// Add a new route group for AI-related endpoints.
-	// These endpoints are protected by authMiddleware to ensure only logged-in users can use them.
 	mux.Route("/ai", func(r chi.Router) {
 		r.Use(app.authMiddleware)
 		r.Post("/identify-bird", app.identifyBirdHandler)
 		r.Post("/ask-question", app.askAiQuestionHandler)
 	})
 
-
 	mux.With(app.authMiddleware).Post("/create-payment-intent", app.handleCreatePaymentIntent)
-	mux.Post("/stripe-webhooks", app.handleStripeWebhook) // New webhook route
+	mux.Post("/stripe-webhooks", app.handleStripeWebhook)
+
+	// Logic: Add new PayOS routes. The create link route is protected, the webhook is public.
+	mux.With(app.authMiddleware).Post("/payos/create-payment-link", app.createPayOSPaymentLinkHandler)
+	mux.Post("/payos-webhook", app.handlePayOSWebhook)
 
 	return mux
 }
