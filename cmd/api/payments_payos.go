@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql" // Import the standard sql package
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -74,7 +75,7 @@ type PayOSWebhookData struct {
 	Signature string `json:"signature"`
 }
 
-// The handler to create the payment link remains unchanged as it was correct.
+// The handler to create the payment link remains unchanged.
 func (app *application) createPayOSPaymentLinkHandler(w http.ResponseWriter, r *http.Request) {
 	user := app.getUserFromFirebaseClaimsCtx(r)
 	if user == nil {
@@ -173,9 +174,8 @@ func (app *application) createPayOSPaymentLinkHandler(w http.ResponseWriter, r *
 	response.JSON(w, http.StatusOK, map[string]string{"checkoutUrl": payOSResponse.Data.CheckoutURL}, false, "Payment link created")
 }
 
-// Logic: This handler is refactored to use a more robust signature verification method.
+// This handler is now updated to gracefully handle test pings from the PayOS dashboard.
 func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Request) {
-    // Read the raw body first
     bodyBytes, err := io.ReadAll(r.Body)
     if err != nil {
         app.logger.Error("Failed to read PayOS webhook body", "error", err)
@@ -183,7 +183,6 @@ func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Reques
         return
     }
 
-    // Now decode it into our struct
     var webhookReq PayOSWebhookData
     if err := json.Unmarshal(bodyBytes, &webhookReq); err != nil {
         app.logger.Error("Failed to decode PayOS webhook body", "error", err)
@@ -191,9 +190,7 @@ func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Reques
         return
     }
 
-    // Verify signature using the raw body
     if !verifyPayOSSignature(bodyBytes, app.config.payos.checksumKey) {
-        // Use the order code from the decoded struct for logging, even if signature fails
         var orderCodeForLog int64
         if webhookReq.Data != nil {
             orderCodeForLog = webhookReq.Data.OrderCode
@@ -202,8 +199,7 @@ func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Reques
         app.errorMessage(w, r, http.StatusUnauthorized, "Invalid signature", nil)
         return
     }
-    
-    // At this point, the signature is valid. We can trust the data.
+
 	if webhookReq.Data == nil {
 		app.logger.Error("PayOS webhook payload is missing 'data' object despite valid signature")
 		app.badRequest(w, r, errors.New("invalid webhook payload: missing data"))
@@ -216,8 +212,16 @@ func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Reques
 
 		order, err := app.store.Orders.GetByGatewayOrderID(r.Context(), gatewayOrderID)
 		if err != nil {
-			app.logger.Error("PayOS webhook: order not found in DB", "gateway_order_id", gatewayOrderID, "error", err)
-			app.notFound(w, r)
+            // Logic: If the error is `sql.ErrNoRows`, it's likely a test ping from PayOS dashboard.
+            // We should log it and return a 200 OK to satisfy their check.
+			if errors.Is(err, sql.ErrNoRows) {
+				app.logger.Info("PayOS webhook: order not found in DB. This may be a test ping from the dashboard.", "gateway_order_id", gatewayOrderID)
+				w.WriteHeader(http.StatusOK) // Acknowledge the test ping
+				return
+			}
+            // For any other database error, it's a real server error.
+			app.logger.Error("PayOS webhook: unexpected DB error", "gateway_order_id", gatewayOrderID, "error", err)
+			app.serverError(w, r, err)
 			return
 		}
 
@@ -246,14 +250,13 @@ func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 }
 
+// The helper functions remain unchanged.
 func createPayOSSignature(data string, secretKey string) string {
 	h := hmac.New(sha256.New, []byte(secretKey))
 	h.Write([]byte(data))
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// Logic: This is the new, more robust verification function. It works directly
-// on the raw JSON payload to avoid issues with Go's struct zero-values.
 func verifyPayOSSignature(rawBody []byte, checksumKey string) bool {
     var webhookContent map[string]interface{}
     if err := json.Unmarshal(rawBody, &webhookContent); err != nil {
@@ -261,7 +264,6 @@ func verifyPayOSSignature(rawBody []byte, checksumKey string) bool {
         return false
     }
 
-    // Extract the signature and the data object
     providedSignature, sigOk := webhookContent["signature"].(string)
     dataObj, dataOk := webhookContent["data"].(map[string]interface{})
     if !sigOk || !dataOk {
@@ -269,14 +271,12 @@ func verifyPayOSSignature(rawBody []byte, checksumKey string) bool {
         return false
     }
 
-    // Sort the keys of the data object
     var keys []string
     for k := range dataObj {
         keys = append(keys, k)
     }
     sort.Strings(keys)
 
-    // Build the data string for signing
     var dataBuilder strings.Builder
     for i, k := range keys {
         if i > 0 {
@@ -284,7 +284,6 @@ func verifyPayOSSignature(rawBody []byte, checksumKey string) bool {
         }
         var valueStr string
         switch v := dataObj[k].(type) {
-        // JSON unmarshals numbers into float64 by default
         case float64:
             valueStr = strconv.FormatInt(int64(v), 10)
         default:
@@ -294,9 +293,7 @@ func verifyPayOSSignature(rawBody []byte, checksumKey string) bool {
     }
     dataStringToSign := dataBuilder.String()
 
-    // Create the expected signature
     expectedSignature := createPayOSSignature(dataStringToSign, checksumKey)
     
-    // Compare securely
     return hmac.Equal([]byte(providedSignature), []byte(expectedSignature))
 }
