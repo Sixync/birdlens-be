@@ -6,7 +6,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"database/sql" // Import the standard sql package
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -75,7 +75,6 @@ type PayOSWebhookData struct {
 	Signature string `json:"signature"`
 }
 
-// The handler to create the payment link remains unchanged.
 func (app *application) createPayOSPaymentLinkHandler(w http.ResponseWriter, r *http.Request) {
 	user := app.getUserFromFirebaseClaimsCtx(r)
 	if user == nil {
@@ -116,10 +115,17 @@ func (app *application) createPayOSPaymentLinkHandler(w http.ResponseWriter, r *
 		return
 	}
 
+	// Logic: Change the description to a shorter format to meet PayOS's 25-character limit.
+	// Using the app name and the unique order code is a common and effective pattern.
+	description := fmt.Sprintf("Birdlens %d", orderCode)
+	if len(description) > 25 {
+		description = description[:25]
+	}
+
 	payOSReq := &PayOSRequestData{
 		OrderCode:   orderCode,
 		Amount:      orderAmount,
-		Description: fmt.Sprintf("Birdlens ExBird Subscription for %s", user.Email),
+		Description: description, // Use the new, shorter description
 		BuyerName:   fmt.Sprintf("%s %s", user.FirstName, user.LastName),
 		BuyerEmail:  user.Email,
 		BuyerPhone:  "0931137913", // Placeholder phone number
@@ -174,7 +180,7 @@ func (app *application) createPayOSPaymentLinkHandler(w http.ResponseWriter, r *
 	response.JSON(w, http.StatusOK, map[string]string{"checkoutUrl": payOSResponse.Data.CheckoutURL}, false, "Payment link created")
 }
 
-// This handler is now updated to gracefully handle test pings from the PayOS dashboard.
+// The rest of the file (handlePayOSWebhook, createPayOSSignature, verifyPayOSSignature) remains the same.
 func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Request) {
     bodyBytes, err := io.ReadAll(r.Body)
     if err != nil {
@@ -212,14 +218,11 @@ func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Reques
 
 		order, err := app.store.Orders.GetByGatewayOrderID(r.Context(), gatewayOrderID)
 		if err != nil {
-            // Logic: If the error is `sql.ErrNoRows`, it's likely a test ping from PayOS dashboard.
-            // We should log it and return a 200 OK to satisfy their check.
 			if errors.Is(err, sql.ErrNoRows) {
 				app.logger.Info("PayOS webhook: order not found in DB. This may be a test ping from the dashboard.", "gateway_order_id", gatewayOrderID)
 				w.WriteHeader(http.StatusOK) // Acknowledge the test ping
 				return
 			}
-            // For any other database error, it's a real server error.
 			app.logger.Error("PayOS webhook: unexpected DB error", "gateway_order_id", gatewayOrderID, "error", err)
 			app.serverError(w, r, err)
 			return
@@ -250,7 +253,6 @@ func (app *application) handlePayOSWebhook(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 }
 
-// The helper functions remain unchanged.
 func createPayOSSignature(data string, secretKey string) string {
 	h := hmac.New(sha256.New, []byte(secretKey))
 	h.Write([]byte(data))
