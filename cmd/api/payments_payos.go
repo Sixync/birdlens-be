@@ -24,8 +24,14 @@ import (
 )
 
 // createPayOSPaymentRequest is the struct for the request body sent from our Android client.
+// Logic: Define the 'item' struct here, as it was previously in the deleted payments.go file.
+type item struct {
+	ID string `json:"id"`
+}
+
+// createPayOSPaymentRequest is the struct for the request body sent from our Android client.
 type createPayOSPaymentRequest struct {
-	Items []item `json:"items"` // Reuses the same item struct from payments.go
+	Items []item `json:"items"`
 }
 
 // PayOSRequestData is the struct we build and send to the PayOS API.
@@ -94,7 +100,7 @@ func (app *application) createPayOSPaymentLinkHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	orderAmount := int64(20000)
+	orderAmount := int64(2000)
 
 	orderCode := time.Now().UnixNano() / int64(time.Millisecond)
 

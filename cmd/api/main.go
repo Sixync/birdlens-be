@@ -23,7 +23,6 @@ import (
 	"github.com/sixync/birdlens-be/internal/store"
 	mediamanager "github.com/sixync/birdlens-be/internal/store/media_manager"
 	"github.com/sixync/birdlens-be/internal/version"
-	"github.com/stripe/stripe-go/v82"
 	"google.golang.org/api/option"
 )
 
@@ -52,18 +51,13 @@ type config struct {
 	}
 	emailVerificationExpiresInHours int
 	forgotPasswordExpiresInHours    int
-	stripe                          struct {
-		secretKey      string
-		publishableKey string
-		webhookSecret  string
-	}
+	// Logic: The entire stripe struct is removed from the config.
 	eBird struct {
 		apiKey string
 	}
 	gemini struct {
 		apiKey string
 	}
-	// Logic: Add a new struct to hold PayOS credentials.
 	payos struct {
 		clientID    string
 		apiKey      string
@@ -115,15 +109,13 @@ func main() {
 }
 
 func run(logger *slog.Logger) error {
-	log.Println("run() function entered.")         // Standard log
-	slog.Info("run() function entered with slog.") // Slog confirmation
+	log.Println("run() function entered.")
+	slog.Info("run() function entered with slog.")
 
 	var cfg config
 
 	slog.Info("Loading environment variables...")
 
-	// Load environment files. Errors will be logged by godotenv if files are not found, which is often okay.
-	// Order might matter if keys are duplicated; last one loaded wins.
 	errMail := godotenv.Load("/env/mail.env")
 	if errMail != nil {
 		slog.Warn("Could not load /env/mail.env", "error", errMail)
@@ -132,10 +124,7 @@ func run(logger *slog.Logger) error {
 	if errDotEnv != nil {
 		slog.Warn("Could not load /env/.env", "error", errDotEnv)
 	}
-	errStripe := godotenv.Load("/env/stripe.env")
-	if errStripe != nil {
-		slog.Warn("Could not load /env/stripe.env", "error", errStripe)
-	}
+	// Logic: The loading of stripe.env is removed.
 	errCloudinary := godotenv.Load("/env/cloudinary.env")
 	if errCloudinary != nil {
 		slog.Warn("Could not load /env/cloudinary.env", "error", errCloudinary)
@@ -148,16 +137,15 @@ func run(logger *slog.Logger) error {
 	if errGemini != nil {
 		slog.Warn("Could not load /env/gemini.env", "error", errGemini)
 	}
-	// Logic: Load the new payos.env file.
 	errPayOS := godotenv.Load("/env/payos.env")
 	if errPayOS != nil {
 		slog.Warn("Could not load /env/payos.env", "error", errPayOS)
 	}
 
 	cfg.httpPort = env.GetInt("HTTP_PORT", 6969)
-	cfg.baseURL = env.GetString("BASE_URL", "http://localhost:8090") // Nginx listens on 80, Go on 6969. BaseURL is external.
+	cfg.baseURL = env.GetString("BASE_URL", "http://localhost:8090")
 	cfg.basicAuth.username = env.GetString("BASIC_AUTH_USERNAME", "admin")
-	cfg.basicAuth.hashedPassword = env.GetString("BASIC_AUTH_HASHED_PASSWORD", "$2a$10$jRb2qniNcoCyQM23T59RfeEQUbgdAXfR6S0scynmKfJa5Gj3arGJa") // Default "pa55word"
+	cfg.basicAuth.hashedPassword = env.GetString("BASIC_AUTH_HASHED_PASSWORD", "$2a$10$jRb2qniNcoCyQM23T59RfeEQUbgdAXfR6S0scynmKfJa5Gj3arGJa")
 	cfg.db.dbConn = env.GetString("DB_ADDR", "postgres://admin:password@birdlens-db:5432/birdlens?sslmode=disable")
 
 	slog.Info("DB_ADDR for database connection", "value", cfg.db.dbConn)
@@ -172,52 +160,31 @@ func run(logger *slog.Logger) error {
 	cfg.jwt.secretKey = env.GetString("JWT_SECRET_KEY", "THISISASECRETKEYHALLELUJAHBABY123123123123123123123")
 	cfg.jwt.accessTokenExpDurationMin = env.GetInt("ACCESS_TOKEN_EXP_MIN", 15)
 	cfg.jwt.refreshTokenExpDurationDay = env.GetInt("REFRESH_TOKEN_EXP_DAY", 1)
-	cfg.frontEndUrl = env.GetString("FRONTEND_URL", "http://localhost") // Assuming frontend is accessed via localhost (or actual domain)
+	cfg.frontEndUrl = env.GetString("FRONTEND_URL", "http://localhost")
 	cfg.emailVerificationExpiresInHours = env.GetInt("EMAIL_VERIFICATION_EXPIRES_IN_HOURS", 7)
 	cfg.forgotPasswordExpiresInHours = env.GetInt("FORGOT_PASSWORD_EXPIRES_IN_HOURS", 1)
 
-	cfg.stripe.secretKey = env.GetString("STRIPE_SECRET_KEY", "")
-	cfg.stripe.publishableKey = env.GetString("STRIPE_PUBLISHABLE_KEY", "")
-	cfg.stripe.webhookSecret = env.GetString("STRIPE_WEBHOOK_SECRET", "")
-
+	// Logic: The reading of Stripe keys is removed.
 	cfg.eBird.apiKey = env.GetString("EBIRD_API_KEY", "")
-
 	cfg.gemini.apiKey = env.GetString("GEMINI_API_KEY", "")
-	// Logic: Read the PayOS keys from the environment into the config struct.
 	cfg.payos.clientID = env.GetString("PAYOS_CLIENT_ID", "")
 	cfg.payos.apiKey = env.GetString("PAYOS_API_KEY", "")
 	cfg.payos.checksumKey = env.GetString("PAYOS_CHECKSUM_KEY", "")
 
-	slog.Info("Stripe keys loaded",
-		"secret_key_present", cfg.stripe.secretKey != "",
-		"publishable_key_present", cfg.stripe.publishableKey != "",
-		"webhook_secret_present", cfg.stripe.webhookSecret != "")
-
 	slog.Info("eBird API key loaded", "present", cfg.eBird.apiKey != "")
-
 	slog.Info("Gemini API key loaded", "present", cfg.gemini.apiKey != "")
-
-	if cfg.stripe.secretKey == "" {
-		slog.Warn("STRIPE_SECRET_KEY is not set. Payments will fail.")
-	}
-	stripe.Key = cfg.stripe.secretKey
-	slog.Info("Stripe SDK key initialized.")
-
+	
 	if cfg.eBird.apiKey == "" {
 		slog.Warn("EBIRD_API_KEY is not set. Premium features for hotspot analysis will fail.")
 	}
-
 	if cfg.gemini.apiKey == "" {
 		slog.Error("CRITICAL: GEMINI_API_KEY is not set. AI features will fail.")
 		return errors.New("GEMINI_API_KEY is not configured")
 	}
-
-	// Logic: Add a check for the PayOS keys.
 	if cfg.payos.clientID == "" || cfg.payos.apiKey == "" || cfg.payos.checksumKey == "" {
 		slog.Error("CRITICAL: PayOS credentials are not fully configured. PayOS payments will fail.")
 		return errors.New("PAYOS_CLIENT_ID, PAYOS_API_KEY, or PAYOS_CHECKSUM_KEY are not configured")
 	}
-
 	slog.Info("PayOS credentials loaded", "clientID_present", cfg.payos.clientID != "")
 
 	slog.Info("Frontend URL for emails/redirects", "url", cfg.frontEndUrl)

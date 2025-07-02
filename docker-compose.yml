@@ -1,4 +1,4 @@
-# birdlens-be/docker-compose.yml
+# (This is the complete, correct file content)
 services:
   birdlens-db:
     image:  postgis/postgis:17-3.5-alpine
@@ -14,9 +14,6 @@ services:
       POSTGRES_DB: birdlens
     volumes:
       - db-data:/var/lib/postgresql/data
-    # Logic: The healthcheck command is updated to use the standard environment variables
-    # that exist *inside* the PostgreSQL container ($POSTGRES_USER). This is more
-    # reliable than relying on Docker Compose's substitution from the host.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -37,6 +34,8 @@ services:
       - ./env/.env
       - ./env/ebird.env
       - ./env/gemini.env
+      # Logic: Added payos.env to the service's environment files.
+      - ./env/payos.env
     environment:
       DB_ADDR: postgres://${DB_USER}:${DB_PASSWORD}@birdlens-db:5432/birdlens?sslmode=disable
       HTTP_PORT: 6969
@@ -47,7 +46,7 @@ services:
       
     deploy:
       mode: replicated
-      replicas: 1 # MODIFIED FROM 3 to 1
+      replicas: 1
     networks:
       - birdlens-network
 
