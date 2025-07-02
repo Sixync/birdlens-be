@@ -92,11 +92,14 @@ func (app *application) routes() http.Handler {
 		r.Post("/ask-question", app.askAiQuestionHandler)
 	})
 
+	// --- Payment Routes ---
+	// All routes that require a logged-in user are protected by app.authMiddleware.
 	mux.With(app.authMiddleware).Post("/create-payment-intent", app.handleCreatePaymentIntent)
-	mux.Post("/stripe-webhooks", app.handleStripeWebhook)
-
-	// Logic: Add new PayOS routes. The create link route is protected, the webhook is public.
 	mux.With(app.authMiddleware).Post("/payos/create-payment-link", app.createPayOSPaymentLinkHandler)
+
+	// Webhook endpoints must be public and MUST NOT have the authMiddleware.
+	// They use other forms of security (e.g., signature verification).
+	mux.Post("/stripe-webhooks", app.handleStripeWebhook)
 	mux.Post("/payos-webhook", app.handlePayOSWebhook)
 
 	return mux
