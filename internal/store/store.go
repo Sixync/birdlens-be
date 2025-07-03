@@ -1,3 +1,4 @@
+// path: birdlens-be/internal/store/store.go
 package store
 
 import (
@@ -25,7 +26,8 @@ type Storage struct {
 		AddEmailVerificationToken(ctx context.Context, userId int64, token string, expiresAt time.Time) error
 		GetEmailVerificationToken(ctx context.Context, userId int64) (token string, expiresAt time.Time, err error)
 		VerifyUserEmail(ctx context.Context, userId int64) error
-		UpdateUserSubscription(ctx context.Context, userID int64, subscriptionID int64, stripeCustomerID, stripeSubscriptionID, stripePriceID, stripeStatus string, periodEnd time.Time) error
+		// Logic: The old Stripe-specific method is now removed from the interface definition.
+		// UpdateUserSubscription(ctx context.Context, userID int64, subscriptionID int64, stripeCustomerID, stripeSubscriptionID, stripePriceID, stripeStatus string, periodEnd time.Time) error
 		GetSubscriptionByName(ctx context.Context, name string) (*Subscription, error)
 		AddResetPasswordToken(ctx context.Context, email string, token string, expiresAt time.Time) error
 		GetUserByResetPasswordToken(ctx context.Context, token string) (*User, error)

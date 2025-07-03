@@ -1,4 +1,5 @@
-
+// path: birdlens-be/internal/store/users.go
+// This is the final, correct version of the file.
 package store
 
 import (
@@ -30,7 +31,7 @@ type User struct {
 	EmailVerificationToken          *string    `json:"-" db:"email_verification_token"`
 	EmailVerificationTokenExpiresAt *time.Time `json:"-" db:"email_verification_token_expires_at"`
 
-	// Logic: The last Stripe-specific field is now removed.
+	// Logic: The struct now perfectly matches the generic database schema after migrations.
 	SubscriptionStatus    *string    `json:"-" db:"subscription_status"`
 	SubscriptionPeriodEnd *time.Time `json:"-" db:"subscription_period_end"`
 }
@@ -94,11 +95,11 @@ func (s *UserStore) GetById(ctx context.Context, id int64) (*User, error) {
 	defer cancel()
 
 	var user User
-	// Logic: Cleaned up SELECT query to remove all Stripe fields.
+	// Logic: Corrected SELECT query to match the new generic schema.
 	query := `
-  SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, subscription_status, subscription_period_end
-  FROM users WHERE id = $1;
-  `
+      SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, subscription_status, subscription_period_end
+      FROM users WHERE id = $1;
+      `
 	err := s.db.GetContext(ctx, &user, query, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -114,8 +115,9 @@ func (s *UserStore) GetByUsername(ctx context.Context, username string) (*User, 
 	defer cancel()
 
 	var user User
+	// Logic: Corrected SELECT query to match the new generic schema.
 	query := `SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, subscription_status, subscription_period_end
-  FROM users WHERE username = $1`
+      FROM users WHERE username = $1`
 
 	err := s.db.GetContext(ctx, &user, query, username)
 	if err != nil {
@@ -132,11 +134,12 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 	defer cancel()
 
 	var user User
+	// Logic: Corrected SELECT query to match the new generic schema.
 	query := `
-    SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, subscription_status, subscription_period_end
-    FROM users
-    WHERE email = $1
-  `
+        SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, subscription_status, subscription_period_end
+        FROM users
+        WHERE email = $1
+      `
 
 	err := s.db.GetContext(ctx, &user, query, email)
 	if err != nil {
@@ -175,8 +178,9 @@ func (s *UserStore) GetByFirebaseUID(ctx context.Context, firebaseUID string) (*
 	defer cancel()
 
 	var user User
+	// Logic: Corrected SELECT query to match the new generic schema.
 	query := `SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, subscription_status, subscription_period_end
-    FROM users WHERE firebase_uid = $1`
+        FROM users WHERE firebase_uid = $1`
 	err := s.db.GetContext(ctx, &user, query, firebaseUID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -240,49 +244,16 @@ func (s *UserStore) VerifyUserEmail(ctx context.Context, userId int64) error {
 	defer cancel()
 
 	query := `
-  UPDATE users
-  SET email_verified = TRUE, email_verification_token = NULL, email_verification_token_expires_at = NULL
-  WHERE id = $1;
-  `
+      UPDATE users
+      SET email_verified = TRUE, email_verification_token = NULL, email_verification_token_expires_at = NULL
+      WHERE id = $1;
+      `
 	_, err := s.db.ExecContext(ctx, query, userId)
 	if err != nil {
 		log.Printf("Error verifying user email for user ID %d: %v", userId, err)
 		return err
 	}
 
-	return nil
-}
-
-func (s *UserStore) UpdateUserSubscription(ctx context.Context, userID int64, subscriptionID int64, stripeCustomerID, stripeSubscriptionID, stripePriceID, stripeStatus string, periodEnd time.Time) error {
-	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
-	defer cancel()
-
-	query := `
-		UPDATE users
-		SET
-			subscription_id = $1,
-			stripe_customer_id = $2,
-			stripe_subscription_id = $3,
-			stripe_price_id = $4,
-			stripe_subscription_status = $5,
-			stripe_subscription_period_end = $6,
-			updated_at = NOW()
-		WHERE id = $7`
-
-	_, err := s.db.ExecContext(ctx, query,
-		subscriptionID,
-		stripeCustomerID,
-		stripeSubscriptionID,
-		stripePriceID,
-		stripeStatus,
-		periodEnd,
-		userID,
-	)
-	if err != nil {
-		log.Printf("Error updating user subscription for user ID %d: %v", userID, err)
-		return err
-	}
-	log.Printf("Successfully updated subscription for user ID %d to subscription ID %d", userID, subscriptionID)
 	return nil
 }
 
@@ -325,8 +296,9 @@ func (s *UserStore) GetUserByResetPasswordToken(ctx context.Context, token strin
 	defer cancel()
 
 	var user User
+	// Logic: Corrected SELECT query to match the new generic schema.
 	query := `
-    SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, stripe_customer_id, stripe_subscription_id, stripe_price_id, stripe_subscription_status, stripe_subscription_period_end
+    SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, subscription_status, subscription_period_end
     FROM users
     WHERE forgot_password_token = $1 AND forgot_password_token_expires_at > NOW()
   `
@@ -351,7 +323,6 @@ func (s *UserStore) GrantSubscriptionForOrder(ctx context.Context, userID int64,
 
 	periodEnd := time.Now().AddDate(0, 0, subDurationDays)
 
-	// Logic: Update the generic column names.
 	query := `
 		UPDATE users
 		SET
