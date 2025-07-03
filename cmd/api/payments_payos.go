@@ -100,7 +100,7 @@ func (app *application) createPayOSPaymentLinkHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	orderAmount := int64(2000)
+	orderAmount := int64(50000)
 
 	orderCode := time.Now().UnixNano() / int64(time.Millisecond)
 
