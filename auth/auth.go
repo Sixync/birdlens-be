@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
+	"regexp"
+	"strings"
 
 	"firebase.google.com/go/auth"
 	"github.com/google/uuid"
@@ -28,15 +31,18 @@ func NewAuthService(s *store.Storage, c *auth.Client) *AuthService {
 	}
 }
 
+// Logic: Simplified RegisterUserReq to only require email and password from the client.
+// Other fields like username are now tagged with `json:"-"` to be ignored during JSON decoding,
+// as they will be auto-generated on the backend.
 type RegisterUserReq struct {
-	Username     string  `json:"username" validate:"required,min=3,max=20"`
+	Username     string  `json:"-"`
 	Password     string  `json:"password" validate:"required,min=3"`
 	Email        string  `json:"email" validate:"required,email"`
-	FirstName    string  `json:"first_name" validate:"required,min=3,max=20"`
-	LastName     string  `json:"last_name" validate:"required,min=3,max=20"`
-	Age          int     `json:"age" validate:"required,min=1,max=120"`
-	AvatarUrl    *string `json:"avatar_url"`
-	AuthProvider string  `json:"auth_provider"`
+	FirstName    string  `json:"-"`
+	LastName     string  `json:"-"`
+	Age          int     `json:"-"`
+	AvatarUrl    *string `json:"-"`
+	AuthProvider string  `json:"-"`
 }
 
 func (s *AuthService) Login(ctx context.Context,
@@ -49,19 +55,18 @@ func (s *AuthService) Login(ctx context.Context,
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			log.Println("user not found with email:", email)
-			return "", ErrUserNotFound 
+			return "", ErrUserNotFound
 		}
 		log.Println("error getting user by email:", err)
-		return "", err 
+		return "", err
 	}
 
 	if user == nil {
 		log.Println("user is nil after GetByEmail, though no explicit error was returned. This indicates user not found for email:", email)
-		return "", ErrUserNotFound 
+		return "", ErrUserNotFound
 	}
 
-
-	log.Printf("user found: %+v", user) 
+	log.Printf("user found: %+v", user)
 
 	if !user.EmailVerified {
 		log.Println("user email not verified for user:", user.Email)
@@ -82,11 +87,10 @@ func (s *AuthService) Login(ctx context.Context,
 		"username":     user.Username,
 		"subscription": subscription,
 	}
-    if user.FirebaseUID == nil || *user.FirebaseUID == "" {
-        log.Printf("User %s (ID: %d) is missing FirebaseUID. Cannot generate custom token.", user.Email, user.Id)
-        return "", errors.New("internal server error: user account configuration issue")
-    }
-
+	if user.FirebaseUID == nil || *user.FirebaseUID == "" {
+		log.Printf("User %s (ID: %d) is missing FirebaseUID. Cannot generate custom token.", user.Email, user.Id)
+		return "", errors.New("internal server error: user account configuration issue")
+	}
 
 	token, err := s.FireAuth.CustomTokenWithClaims(ctx, *user.FirebaseUID, claims)
 	if err != nil {
@@ -100,6 +104,52 @@ func (s *AuthService) Login(ctx context.Context,
 }
 
 func (s *AuthService) Register(ctx context.Context, req RegisterUserReq) (string, int64, error) {
+	// Logic: Auto-generate user details for a simplified registration process.
+	// 1. A base username is derived from the local part of the user's email.
+	// 2. The username is sanitized to ensure it contains only valid characters.
+	// 3. A loop attempts to create a unique username by appending a random suffix if the base username is already taken.
+	// 4. Default values are set for FirstName, LastName, and Age.
+	emailParts := strings.Split(req.Email, "@")
+	baseUsername := emailParts[0]
+
+	reg, err := regexp.Compile("[^a-zA-Z0-9_]+")
+	if err != nil {
+		log.Printf("failed to compile username sanitization regex: %v", err)
+		return "", 0, errors.New("internal server error during registration")
+	}
+	baseUsername = reg.ReplaceAllString(baseUsername, "_")
+
+	if len(baseUsername) > 15 {
+		baseUsername = baseUsername[:15]
+	}
+
+	var finalUsername string
+	for i := 0; i < 5; i++ { // Try up to 5 times to find a unique username
+		tempUsername := baseUsername
+		if i > 0 {
+			randomSuffix := uuid.New().String()[:4]
+			tempUsername = fmt.Sprintf("%s_%s", baseUsername, randomSuffix)
+		}
+
+		exists, err := s.store.Users.UsernameExists(ctx, tempUsername)
+		if err != nil {
+			return "", 0, err
+		}
+		if !exists {
+			finalUsername = tempUsername
+			break
+		}
+	}
+
+	if finalUsername == "" {
+		return "", 0, errors.New("could not generate a unique username")
+	}
+
+	req.Username = finalUsername
+	req.FirstName = "New"
+	req.LastName = "User"
+	req.Age = 18
+
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
 		return "", 0, err
@@ -117,16 +167,15 @@ func (s *AuthService) Register(ctx context.Context, req RegisterUserReq) (string
 		req.AuthProvider = "firebase"
 	}
 	user.AuthProvider = req.AuthProvider
-	user.EmailVerified = false 
+	user.EmailVerified = false
 
 	log.Println("user hashed password:", *user.HashedPassword)
 
-	err = s.store.Users.Create(ctx, user) 
+	err = s.store.Users.Create(ctx, user)
 	if err != nil {
 		log.Printf("failed to create user in database: %v", err)
 		return "", 0, errors.New("failed to register user")
 	}
-
 
 	customToken, err := s.FireAuth.CustomToken(ctx, *user.FirebaseUID)
 	if err != nil {
