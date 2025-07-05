@@ -32,6 +32,7 @@ type Storage struct {
 		AddResetPasswordToken(ctx context.Context, email string, token string, expiresAt time.Time) error
 		GetUserByResetPasswordToken(ctx context.Context, token string) (*User, error)
 		GrantSubscriptionForOrder(ctx context.Context, userID int64, subscriptionID int64) error
+		GetUserLifeList(ctx context.Context, userID int64) ([]string, error)
 	}
 	Posts interface {
 		Create(context.Context, *Post) error

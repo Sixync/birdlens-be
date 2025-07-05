@@ -40,6 +40,29 @@ type UserStore struct {
 	db *sqlx.DB
 }
 
+func (s *UserStore) GetUserLifeList(ctx context.Context, userID int64) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	var lifeList []string
+	query := `
+        SELECT DISTINCT tagged_species_code
+        FROM posts
+        WHERE user_id = $1
+          AND type = 'sighting'
+          AND tagged_species_code IS NOT NULL
+        ORDER BY tagged_species_code;`
+
+	err := s.db.SelectContext(ctx, &lifeList, query, userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return []string{}, nil // Return empty list, not an error
+		}
+		return nil, err
+	}
+	return lifeList, nil
+}
+
 func (s *UserStore) Create(ctx context.Context, user *User) error {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()

@@ -45,6 +45,8 @@ func (app *application) routes() http.Handler {
 
 	mux.Route("/users", func(r chi.Router) {
 		r.With(app.paginate).With(app.getUserMiddleware).Get("/{user_id}/followers", app.getUserFollowersHandler)
+		// Add the new life-list route
+		r.With(app.authMiddleware).With(app.getUserMiddleware).Get("/{user_id}/life-list", app.getUserLifeListHandler)
 		r.Post("/", app.createUserHandler)
 		r.With(app.authMiddleware).Get("/me", app.getCurrentUserProfileHandler)
 	})

@@ -37,6 +37,24 @@ func (app *application) getUserFollowersHandler(w http.ResponseWriter, r *http.R
 	}
 }
 
+// New handler for the life list
+func (app *application) getUserLifeListHandler(w http.ResponseWriter, r *http.Request) {
+	user, err := getUserFromCtx(r)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	ctx := r.Context()
+	lifeList, err := app.store.Users.GetUserLifeList(ctx, user.Id)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, lifeList, false, "life list retrieved successfully")
+}
+
 type CreateUserReq struct {
 	Username  string  `json:"username"`
 	Password  string  `json:"password"`
