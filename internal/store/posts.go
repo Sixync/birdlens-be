@@ -12,18 +12,20 @@ import (
 
 // Post represents a post entity
 type Post struct {
-	Id            int64      `json:"id" db:"id"`
-	Content       string     `json:"content" db:"content"`
-	LocationName  string     `json:"location_name" db:"location_name"`
-	Latitude      float64    `json:"latitude" db:"latitude"`
-	Longitude     float64    `json:"longitude" db:"longitude"`
-	PrivacyLevel  string     `json:"privacy_level" db:"privacy_level"`
-	Type          string     `json:"type" db:"type"`
-	IsFeatured    bool       `json:"is_featured" db:"is_featured"`
-	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt     *time.Time `json:"updated_at" db:"updated_at"`
-	ReactionCount int        `json:"reaction_count" db:"reaction_count"`
-	UserId        int64      `json:"user_id" db:"user_id"`
+	Id                int64      `json:"id" db:"id"`
+	Content           string     `json:"content" db:"content"`
+	LocationName      string     `json:"location_name" db:"location_name"`
+	Latitude          float64    `json:"latitude" db:"latitude"`
+	Longitude         float64    `json:"longitude" db:"longitude"`
+	PrivacyLevel      string     `json:"privacy_level" db:"privacy_level"`
+	Type              string     `json:"type" db:"type"`
+	IsFeatured        bool       `json:"is_featured" db:"is_featured"`
+	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt         *time.Time `json:"updated_at" db:"updated_at"`
+	ReactionCount     int        `json:"reaction_count" db:"reaction_count"`
+	UserId            int64      `json:"user_id" db:"user_id"`
+	SightingDate      *time.Time `json:"sighting_date,omitempty" db:"sighting_date"`
+	TaggedSpeciesCode *string    `json:"tagged_species_code,omitempty" db:"tagged_species_code"`
 }
 
 type PostReaction struct {
@@ -55,11 +57,11 @@ func (s *PostStore) Create(ctx context.Context, post *Post) error {
 	defer cancel()
 
 	query := `
-    INSERT INTO posts (user_id, content, location_name, latitude, longitude, privacy_level, type, is_featured)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    INSERT INTO posts (user_id, content, location_name, latitude, longitude, privacy_level, type, is_featured, sighting_date, tagged_species_code)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     RETURNING id, created_at`
 
-	err := s.db.QueryRowContext(ctx, query, post.UserId, post.Content, post.LocationName, post.Latitude, post.Longitude, post.PrivacyLevel, post.Type, post.IsFeatured).Scan(&post.Id, &post.CreatedAt)
+	err := s.db.QueryRowContext(ctx, query, post.UserId, post.Content, post.LocationName, post.Latitude, post.Longitude, post.PrivacyLevel, post.Type, post.IsFeatured, post.SightingDate, post.TaggedSpeciesCode).Scan(&post.Id, &post.CreatedAt)
 	if err != nil {
 		log.Println("Create post error", err)
 		return err
@@ -88,7 +90,9 @@ func (s *PostStore) Update(ctx context.Context, post *Post) error {
 			longitude = :longitude,
 			privacy_level = :privacy_level,
 			type = :type,
-			is_featured = :is_featured
+			is_featured = :is_featured,
+			sighting_date = :sighting_date,
+			tagged_species_code = :tagged_species_code
 		WHERE id = :id
 		RETURNING created_at, updated_at`
 
@@ -148,10 +152,15 @@ func (s *PostStore) GetById(ctx context.Context, id int64) (*Post, error) {
 
 	var post Post
 	query := `
-    SELECT id, location_name, latitude, longitude, privacy_level, type, is_featured, created_at, updated_at
+    SELECT id, content, location_name, latitude, longitude, privacy_level, type, is_featured, created_at, updated_at, sighting_date, tagged_species_code, user_id
     FROM posts WHERE id = $1;
   `
-	err := s.db.QueryRowContext(ctx, query, id).Scan(&post.Id, &post.LocationName, &post.Latitude, &post.Longitude, &post.PrivacyLevel, &post.Type, &post.IsFeatured, &post.CreatedAt, &post.UpdatedAt)
+	// The order of scanned fields must match the query
+	err := s.db.QueryRowContext(ctx, query, id).Scan(
+		&post.Id, &post.Content, &post.LocationName, &post.Latitude, &post.Longitude,
+		&post.PrivacyLevel, &post.Type, &post.IsFeatured, &post.CreatedAt, &post.UpdatedAt,
+		&post.SightingDate, &post.TaggedSpeciesCode, &post.UserId,
+	)
 	if err != nil {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
@@ -331,9 +340,6 @@ func (s *PostStore) GetTrendingPosts(ctx context.Context, duration time.Time, li
 	}
 
 	var posts []*Post
-	// Logic: The p.user_id column was missing from the SELECT and GROUP BY clauses.
-	// This caused the post struct to have a user ID of 0, leading to a "no rows in result set"
-	// error when fetching the user details in the handler. It has now been added.
 	query := `
     SELECT 
         p.id, 
@@ -347,11 +353,13 @@ func (s *PostStore) GetTrendingPosts(ctx context.Context, duration time.Time, li
         p.is_featured, 
         p.created_at, 
         p.updated_at,
+		p.sighting_date,
+		p.tagged_species_code,
         COALESCE(COUNT(pr.reaction_type), 0) AS reaction_count
     FROM posts p 
     LEFT JOIN post_reactions pr ON p.id = pr.post_id 
     WHERE p.created_at >= $1 
-    GROUP BY p.id, p.user_id, p.content, p.location_name, p.latitude, p.longitude, p.privacy_level, p.type, p.is_featured, p.created_at, p.updated_at
+    GROUP BY p.id, p.user_id, p.content, p.location_name, p.latitude, p.longitude, p.privacy_level, p.type, p.is_featured, p.created_at, p.updated_at, p.sighting_date, p.tagged_species_code
     ORDER BY reaction_count DESC
     LIMIT $2 OFFSET $3;
   `
@@ -388,7 +396,7 @@ func (s *PostStore) GetFollowerPosts(ctx context.Context, userId int64, limit, o
 
 	var posts []*Post
 	query := `
-    SELECT p.id, p.content, p.location_name, p.latitude, p.longitude, p.privacy_level, p.type, p.is_featured, p.created_at, p.updated_at, p.user_id 
+    SELECT p.id, p.content, p.location_name, p.latitude, p.longitude, p.privacy_level, p.type, p.is_featured, p.created_at, p.updated_at, p.user_id, p.sighting_date, p.tagged_species_code 
     FROM posts p 
     JOIN followers f ON p.user_id = f.follower_id 
     WHERE f.user_id = $1 

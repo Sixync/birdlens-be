@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	services "github.com/sixync/birdlens-be/cmd/services/posts"
 	"github.com/sixync/birdlens-be/internal/response"
 	"github.com/sixync/birdlens-be/internal/store"
+	services "github.com/sixync/birdlens-be/services/posts"
 )
 
 var PostKey key = "post"
