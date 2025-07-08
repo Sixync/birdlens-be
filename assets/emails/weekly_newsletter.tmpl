@@ -1,0 +1,71 @@
+{{define "subject"}}Weekly Updates from Birdlens! 🐦{{end}}
+
+{{define "plainBody"}}
+Hi,
+
+Here's what's new at Birdlens this week:
+
+{{range .Updates}}
+- {{.Message}} (by {{.Author}})
+{{end}}
+
+Thanks for being part of our community!
+
+The Birdlens Team
+{{end}}
+
+{{define "htmlBody"}}
+<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width" />
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <style>
+    body { font-family: sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; line-height: 1.4; }
+    .container { display: block; Margin: 0 auto !important; max-width: 580px; padding: 10px; width: 580px; }
+    .content { box-sizing: border-box; display: block; Margin: 0 auto; max-width: 580px; padding: 10px; }
+    .main { background: #ffffff; border-radius: 3px; width: 100%; }
+    .wrapper { box-sizing: border-box; padding: 20px; }
+    ul { list-style-type: none; padding-left: 0; }
+    li {
+        background-color: #f4f4f4;
+        border-left: 4px solid #3498db;
+        padding: 10px;
+        margin-bottom: 8px;
+        border-radius: 0 4px 4px 0;
+    }
+    .author { font-size: 12px; color: #777777; }
+  </style>
+</head>
+<body>
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" class="body">
+    <tr>
+      <td> </td>
+      <td class="container">
+        <div class="content">
+          <table role="presentation" class="main">
+            <tr>
+              <td class="wrapper">
+                <h1 style="font-size: 24px; font-weight: bold; margin: 0; margin-bottom: 15px;">This Week at Birdlens!</h1>
+                <p>Hi there! Here's a quick look at the latest updates and fixes we've pushed to the app this week, thanks to our development team:</p>
+                <ul>
+                  {{range .Updates}}
+                  <li>
+                    <p style="margin: 0;">{{.Message}}</p>
+                    <span class="author">by {{.Author}}</span>
+                  </li>
+                  {{end}}
+                </ul>
+                <p>Thanks for being part of our amazing community!</p>
+                <p>— The Birdlens Team</p>
+              </td>
+            </tr>
+          </table>
+        </div>
+      </td>
+      <td> </td>
+    </tr>
+  </table>
+</body>
+</html>
+{{end}}

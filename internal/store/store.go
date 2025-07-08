@@ -26,13 +26,12 @@ type Storage struct {
 		AddEmailVerificationToken(ctx context.Context, userId int64, token string, expiresAt time.Time) error
 		GetEmailVerificationToken(ctx context.Context, userId int64) (token string, expiresAt time.Time, err error)
 		VerifyUserEmail(ctx context.Context, userId int64) error
-		// Logic: The old Stripe-specific method is now removed from the interface definition.
-		// UpdateUserSubscription(ctx context.Context, userID int64, subscriptionID int64, stripeCustomerID, stripeSubscriptionID, stripePriceID, stripeStatus string, periodEnd time.Time) error
 		GetSubscriptionByName(ctx context.Context, name string) (*Subscription, error)
 		AddResetPasswordToken(ctx context.Context, email string, token string, expiresAt time.Time) error
 		GetUserByResetPasswordToken(ctx context.Context, token string) (*User, error)
 		GrantSubscriptionForOrder(ctx context.Context, userID int64, subscriptionID int64) error
 		GetUserLifeList(ctx context.Context, userID int64) ([]string, error)
+		GetAllUserEmails(ctx context.Context) ([]string, error)
 	}
 	Posts interface {
 		Create(context.Context, *Post) error
@@ -119,6 +118,11 @@ type Storage struct {
 		GetByGatewayOrderID(ctx context.Context, gatewayOrderID string) (*Order, error)
 		UpdateStatus(ctx context.Context, id int64, status string) error
 	}
+	NewsletterUpdates interface {
+		Create(ctx context.Context, update *NewsletterUpdate) error
+		GetUnprocessed(ctx context.Context) ([]*NewsletterUpdate, error)
+		MarkAsProcessed(ctx context.Context, ids []int64) error
+	}
 }
 
 func NewStore(db *sqlx.DB) *Storage {
@@ -138,6 +142,7 @@ func NewStore(db *sqlx.DB) *Storage {
 		Species:       &SpeciesStore{db},
 		Roles:         &RoleStore{db},
 		Orders:        &OrderStore{db},
+		NewsletterUpdates: &NewsletterUpdateStore{db},
 	}
 }
 

@@ -103,6 +103,8 @@ func (app *application) routes() http.Handler {
 	// They use other forms of security (e.g., signature verification).
 	// mux.Post("/stripe-webhooks", app.handleStripeWebhook)
 	mux.Post("/payos-webhook", app.handlePayOSWebhook)
+	mux.Post("/webhooks/github", app.handleGitHubWebhook)
+	mux.Post("/services/send-weekly-newsletter", app.handleSendNewsletter)
 
 	return mux
 }

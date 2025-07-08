@@ -363,3 +363,11 @@ func (s *UserStore) GrantSubscriptionForOrder(ctx context.Context, userID int64,
 	log.Printf("Successfully granted subscription for user ID %d (Sub ID: %d)", userID, subscriptionID)
 	return nil
 }
+
+func (s *UserStore) GetAllUserEmails(ctx context.Context) ([]string, error) {
+	var emails []string
+	// Only send to users who have verified their email.
+	query := `SELECT email FROM users WHERE email_verified = TRUE`
+	err := s.db.SelectContext(ctx, &emails, query)
+	return emails, err
+}
