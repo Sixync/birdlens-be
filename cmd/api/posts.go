@@ -20,6 +20,9 @@ import (
 
 var PostKey key = "post"
 
+// Logic: The PostResponse struct is updated to include location data.
+// This is essential for the Sighting card on the client, which needs to display
+// the location name where the bird was sighted.
 type PostResponse struct {
 	ID              int64     `json:"id"`
 	PosterAvatarUrl *string   `json:"poster_avatar_url"`
@@ -31,6 +34,13 @@ type PostResponse struct {
 	CommentsCount   int       `json:"comments_count"`
 	SharesCount     int       `json:"shares_count"`
 	IsLiked         bool      `json:"is_liked"`
+	// Sighting-specific fields
+	Type              string     `json:"type"`
+	SightingDate      *time.Time `json:"sighting_date,omitempty"`
+	TaggedSpeciesCode *string    `json:"tagged_species_code,omitempty"`
+	LocationName      string     `json:"location_name,omitempty"`
+	Latitude          float64    `json:"latitude,omitempty"`
+	Longitude         float64    `json:"longitude,omitempty"`
 }
 
 func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +74,7 @@ func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) 
 		var postResponse PostResponse
 
 		postResponse.ID = post.Id
-		// Logic: This query for the poster was failing with "sql: no rows in result set"
+		// This query for the poster was failing with "sql: no rows in result set"
 		// because the user_id on the post was 0. The fix in createPostHandler
 		// ensures post.UserId is now a valid, existing user ID.
 		poster, err := app.store.Users.GetById(ctx, post.UserId)
@@ -77,6 +87,14 @@ func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) 
 		postResponse.PosterName = poster.Username
 		postResponse.CreatedAt = post.CreatedAt
 		postResponse.Content = post.Content
+		// Logic: Populate the newly added fields for the PostResponse.
+		// This makes the sighting's location data available to the client.
+		postResponse.Type = post.Type
+		postResponse.SightingDate = post.SightingDate
+		postResponse.TaggedSpeciesCode = post.TaggedSpeciesCode
+		postResponse.LocationName = post.LocationName
+		postResponse.Latitude = post.Latitude
+		postResponse.Longitude = post.Longitude
 		likes, err := app.store.Posts.GetLikeCounts(ctx, post.Id)
 		if err != nil {
 			app.serverError(w, r, err)
@@ -175,7 +193,7 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 	post.Type = r.FormValue("type")
 	post.IsFeatured = r.FormValue("is_featured") == "true"
 
-	// Logic: Associate the post with the currently authenticated user.
+	// Associate the post with the currently authenticated user.
 	// This was the missing step causing the user_id to be 0.
 	post.UserId = currentUser.Id
 
