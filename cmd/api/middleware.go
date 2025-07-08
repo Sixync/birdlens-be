@@ -10,7 +10,7 @@ import (
 
 	"github.com/sixync/birdlens-be/internal/jwt"
 	"github.com/sixync/birdlens-be/internal/response"
-
+	"github.com/sixync/birdlens-be/internal/store"
 	"github.com/tomasen/realip"
 )
 
@@ -121,25 +121,40 @@ func (app *application) authMiddleware(next http.Handler) http.Handler {
 
 		log.Println("Token claims:", claims)
 
-		// Token is valid, store claims in context
 		ctx := context.WithValue(r.Context(), UserClaimsKey, claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// func (app *application) adminRoutes(next http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		claims, ok := r.Context().Value(UserClaimsKey).(*jwt.FirebaseClaims)
-// 		if !ok || claims == nil {
-// 			app.unauthorized(w, r)
-// 			return
-// 		}
-//
-// 		if !claims.() {
-// 			app.forbidden(w, r)
-// 			return
-// 		}
-//
-// 		next.ServeHTTP(w, r)
-// 	})
-// }
+// adminOnlyMiddleware checks if the authenticated user has the 'admin' role.
+// It must run *after* the authMiddleware.
+func (app *application) adminOnlyMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := app.getUserFromFirebaseClaimsCtx(r)
+		if user == nil {
+			app.unauthorized(w, r)
+			return
+		}
+
+		roles, err := app.store.Roles.GetUserRoles(r.Context(), user.Id)
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+
+		isAdmin := false
+		for _, role := range roles {
+			if role == store.ADMIN {
+				isAdmin = true
+				break
+			}
+		}
+
+		if !isAdmin {
+			app.errorMessage(w, r, http.StatusForbidden, "You do not have permission to access this resource.", nil)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}

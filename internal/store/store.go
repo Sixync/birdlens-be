@@ -1,4 +1,3 @@
-// path: birdlens-be/internal/store/store.go
 package store
 
 import (
@@ -112,12 +111,15 @@ type Storage struct {
 	Roles interface {
 		GetByID(ctx context.Context, id int64) (*Role, error)
 		AddUserToRole(ctx context.Context, userID int64, roleName string) error
+		// Logic: Add new method to get roles for a user.
+		GetUserRoles(ctx context.Context, userID int64) ([]string, error)
 	}
 	Orders interface {
 		Create(ctx context.Context, order *Order) error
 		GetByGatewayOrderID(ctx context.Context, gatewayOrderID string) (*Order, error)
 		UpdateStatus(ctx context.Context, id int64, status string) error
 	}
+	// Logic: Add the new interface for newsletter updates.
 	NewsletterUpdates interface {
 		Create(ctx context.Context, update *NewsletterUpdate) error
 		GetUnprocessed(ctx context.Context) ([]*NewsletterUpdate, error)
@@ -142,6 +144,7 @@ func NewStore(db *sqlx.DB) *Storage {
 		Species:       &SpeciesStore{db},
 		Roles:         &RoleStore{db},
 		Orders:        &OrderStore{db},
+		// Logic: Initialize the new store.
 		NewsletterUpdates: &NewsletterUpdateStore{db},
 	}
 }

@@ -1,5 +1,4 @@
 // path: birdlens-be/internal/store/users.go
-// This is the final, correct version of the file.
 package store
 
 import (
@@ -30,15 +29,15 @@ type User struct {
 	EmailVerified                   bool       `json:"email_verified" db:"email_verified"`
 	EmailVerificationToken          *string    `json:"-" db:"email_verification_token"`
 	EmailVerificationTokenExpiresAt *time.Time `json:"-" db:"email_verification_token_expires_at"`
-
-	// Logic: The struct now perfectly matches the generic database schema after migrations.
-	SubscriptionStatus    *string    `json:"-" db:"subscription_status"`
-	SubscriptionPeriodEnd *time.Time `json:"-" db:"subscription_period_end"`
+	SubscriptionStatus              *string    `json:"-" db:"subscription_status"`
+	SubscriptionPeriodEnd           *time.Time `json:"-" db:"subscription_period_end"`
 }
 
 type UserStore struct {
 	db *sqlx.DB
 }
+
+// ... (all existing UserStore methods from your provided code remain here) ...
 
 func (s *UserStore) GetUserLifeList(ctx context.Context, userID int64) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
@@ -56,7 +55,7 @@ func (s *UserStore) GetUserLifeList(ctx context.Context, userID int64) ([]string
 	err := s.db.SelectContext(ctx, &lifeList, query, userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return []string{}, nil // Return empty list, not an error
+			return []string{}, nil
 		}
 		return nil, err
 	}
@@ -118,7 +117,6 @@ func (s *UserStore) GetById(ctx context.Context, id int64) (*User, error) {
 	defer cancel()
 
 	var user User
-	// Logic: Corrected SELECT query to match the new generic schema.
 	query := `
       SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, subscription_status, subscription_period_end
       FROM users WHERE id = $1;
@@ -138,7 +136,6 @@ func (s *UserStore) GetByUsername(ctx context.Context, username string) (*User, 
 	defer cancel()
 
 	var user User
-	// Logic: Corrected SELECT query to match the new generic schema.
 	query := `SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, subscription_status, subscription_period_end
       FROM users WHERE username = $1`
 
@@ -157,7 +154,6 @@ func (s *UserStore) GetByEmail(ctx context.Context, email string) (*User, error)
 	defer cancel()
 
 	var user User
-	// Logic: Corrected SELECT query to match the new generic schema.
 	query := `
         SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, subscription_status, subscription_period_end
         FROM users
@@ -201,7 +197,6 @@ func (s *UserStore) GetByFirebaseUID(ctx context.Context, firebaseUID string) (*
 	defer cancel()
 
 	var user User
-	// Logic: Corrected SELECT query to match the new generic schema.
 	query := `SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, subscription_status, subscription_period_end
         FROM users WHERE firebase_uid = $1`
 	err := s.db.GetContext(ctx, &user, query, firebaseUID)
@@ -319,7 +314,6 @@ func (s *UserStore) GetUserByResetPasswordToken(ctx context.Context, token strin
 	defer cancel()
 
 	var user User
-	// Logic: Corrected SELECT query to match the new generic schema.
 	query := `
     SELECT id, firebase_uid, subscription_id, username, age, first_name, last_name, email, hashed_password, auth_provider, avatar_url, created_at, updated_at, email_verified, email_verification_token, email_verification_token_expires_at, subscription_status, subscription_period_end
     FROM users
@@ -364,6 +358,7 @@ func (s *UserStore) GrantSubscriptionForOrder(ctx context.Context, userID int64,
 	return nil
 }
 
+// Logic: Add a new method to get all verified user emails for the newsletter.
 func (s *UserStore) GetAllUserEmails(ctx context.Context) ([]string, error) {
 	var emails []string
 	// Only send to users who have verified their email.

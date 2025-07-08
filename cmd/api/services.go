@@ -1,4 +1,3 @@
-// birdlens-be/cmd/api/services.go (New File or added to an existing services file)
 package main
 
 import (
@@ -8,15 +7,13 @@ import (
 	"github.com/sixync/birdlens-be/internal/response"
 )
 
-// handleSendNewsletter is triggered by a scheduler (e.g., cron job).
+// handleSendNewsletter is triggered by an authenticated admin.
 // It compiles unprocessed updates and sends them to all users.
 func (app *application) handleSendNewsletter(w http.ResponseWriter, r *http.Request) {
-	// Optional: Add a secret header/token check to ensure this is only called by your scheduler.
-	// For example: if r.Header.Get("X-Scheduler-Secret") != app.config.schedulerSecret { ... }
-
+	// Admin access is already verified by the adminOnlyMiddleware.
 	ctx := r.Context()
 
-	// 1. Fetch all unprocessed updates from the database.
+	// Fetch all unprocessed updates from the database.
 	updates, err := app.store.NewsletterUpdates.GetUnprocessed(ctx)
 	if err != nil {
 		app.serverError(w, r, err)
@@ -24,12 +21,12 @@ func (app *application) handleSendNewsletter(w http.ResponseWriter, r *http.Requ
 	}
 
 	if len(updates) == 0 {
-		slog.Info("Newsletter job ran, but no new updates to send.")
+		slog.Info("Admin triggered newsletter, but no new updates to send.")
 		response.JSON(w, http.StatusOK, nil, false, "No new updates to send.")
 		return
 	}
 
-	// 2. Fetch all user emails.
+	// Fetch all verified user emails.
 	userEmails, err := app.store.Users.GetAllUserEmails(ctx)
 	if err != nil {
 		app.serverError(w, r, err)
@@ -42,15 +39,14 @@ func (app *application) handleSendNewsletter(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// 3. Prepare and queue the emails.
+	// Prepare and queue the emails using the background worker pool.
 	emailData := map[string]interface{}{
 		"Updates": updates,
 	}
 
-	slog.Info("Sending weekly newsletter", "update_count", len(updates), "user_count", len(userEmails))
+	slog.Info("Sending weekly newsletter via admin trigger", "update_count", len(updates), "user_count", len(userEmails))
 
 	for _, email := range userEmails {
-		// Use the existing background worker pool to send emails.
 		JobQueue <- EmailJob{
 			Recipient: email,
 			Data:      emailData,
@@ -58,7 +54,7 @@ func (app *application) handleSendNewsletter(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	// 4. Mark the updates as processed to avoid re-sending.
+	// Mark the updates as processed to avoid re-sending.
 	updateIDs := make([]int64, len(updates))
 	for i, u := range updates {
 		updateIDs[i] = u.ID
@@ -66,11 +62,11 @@ func (app *application) handleSendNewsletter(w http.ResponseWriter, r *http.Requ
 
 	err = app.store.NewsletterUpdates.MarkAsProcessed(ctx, updateIDs)
 	if err != nil {
-		// Log this error critically, as it could cause duplicate emails.
 		app.logger.Error("CRITICAL: Failed to mark newsletter updates as processed.", "error", err)
-		app.serverError(w, r, err) // Still report success to the scheduler to prevent retries
+		// We still return a success to the admin dashboard but log the critical error.
+		response.JSON(w, http.StatusAccepted, nil, false, "Newsletter sending initiated, but failed to mark updates as processed.")
 		return
 	}
 
-	response.JSON(w, http.StatusOK, nil, false, "Newsletter sending process initiated.")
+	response.JSON(w, http.StatusAccepted, nil, false, "Newsletter sending process initiated.")
 }

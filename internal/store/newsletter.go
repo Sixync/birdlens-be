@@ -1,4 +1,3 @@
-// birdlens-be/internal/store/newsletter.go
 package store
 
 import (

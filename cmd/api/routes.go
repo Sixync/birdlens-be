@@ -1,5 +1,3 @@
-// path: birdlens-be/cmd/api/routes.go
-// (complete file content here - full imports, package names, all code)
 package main
 
 import (
@@ -7,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/cors" // Import the cors package
+	"github.com/go-chi/cors"
 )
 
 func (app *application) routes() http.Handler {
@@ -27,6 +25,10 @@ func (app *application) routes() http.Handler {
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
+
+	// --- PUBLIC WEBHOOKS & SERVICES ---
+	mux.Post("/webhooks/github", app.handleGitHubWebhook)
+
 	mux.Route("/posts", func(r chi.Router) {
 		r.With(app.authMiddleware).With(app.paginate).Get("/", app.getPostsHandler)
 		r.With(app.authMiddleware).Post("/", app.createPostHandler)
@@ -45,7 +47,6 @@ func (app *application) routes() http.Handler {
 
 	mux.Route("/users", func(r chi.Router) {
 		r.With(app.paginate).With(app.getUserMiddleware).Get("/{user_id}/followers", app.getUserFollowersHandler)
-		// Add the new life-list route
 		r.With(app.authMiddleware).With(app.getUserMiddleware).Get("/{user_id}/life-list", app.getUserLifeListHandler)
 		r.Post("/", app.createUserHandler)
 		r.With(app.authMiddleware).Get("/me", app.getCurrentUserProfileHandler)
@@ -94,17 +95,17 @@ func (app *application) routes() http.Handler {
 		r.Post("/ask-question", app.askAiQuestionHandler)
 	})
 
-	// --- Payment Routes ---
-	// All routes that require a logged-in user are protected by app.authMiddleware.
-	// mux.With(app.authMiddleware).Post("/create-payment-intent", app.handleCreatePaymentIntent)
 	mux.With(app.authMiddleware).Post("/payos/create-payment-link", app.createPayOSPaymentLinkHandler)
-
-	// Webhook endpoints must be public and MUST NOT have the authMiddleware.
-	// They use other forms of security (e.g., signature verification).
-	// mux.Post("/stripe-webhooks", app.handleStripeWebhook)
 	mux.Post("/payos-webhook", app.handlePayOSWebhook)
-	mux.Post("/webhooks/github", app.handleGitHubWebhook)
-	mux.Post("/services/send-weekly-newsletter", app.handleSendNewsletter)
+
+	// --- ADMIN-ONLY ROUTES ---
+	// Logic: Create a new group for admin-only routes and protect it with middleware.
+	mux.Group(func(r chi.Router) {
+		r.Use(app.authMiddleware)
+		r.Use(app.adminOnlyMiddleware)
+		// Logic: Define the admin-triggered newsletter endpoint.
+		r.Post("/admin/services/send-newsletter", app.handleSendNewsletter)
+	})
 
 	return mux
 }
@@ -115,6 +116,5 @@ func (app *application) GetQueryInt(r *http.Request, key string) (int, error) {
 	if err != nil {
 		return -1, err
 	}
-
 	return result, nil
 }

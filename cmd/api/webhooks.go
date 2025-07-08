@@ -1,4 +1,3 @@
-// birdlens-be/cmd/api/webhooks.go
 package main
 
 import (
@@ -30,19 +29,15 @@ type GitHubCommit struct {
 
 // GitHubWebhookPayload represents the structure of the JSON payload from GitHub.
 type GitHubWebhookPayload struct {
-	Ref        string         `json:"ref"`
-	Commits    []GitHubCommit `json:"commits"`
-	Repository struct {
-		Name string `json:"name"`
-	} `json:"repository"`
+	Ref     string         `json:"ref"`
+	Commits []GitHubCommit `json:"commits"`
 }
 
 // handleGitHubWebhook is the handler for incoming GitHub webhooks.
 func (app *application) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
-	// 1. Verify the signature to ensure the request is genuinely from GitHub.
-	// This is a critical security step.
+	// Verify the signature to ensure the request is genuinely from GitHub.
 	githubSignature := r.Header.Get("X-Hub-Signature-256")
-	webhookSecret := env.GetString("GITHUB_WEBHOOK_SECRET", "") // Store this secret securely.
+	webhookSecret := env.GetString("GITHUB_WEBHOOK_SECRET", "")
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -56,7 +51,6 @@ func (app *application) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Calculate the expected signature.
 	mac := hmac.New(sha256.New, []byte(webhookSecret))
 	mac.Write(body)
 	expectedSignature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
@@ -67,24 +61,21 @@ func (app *application) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 2. Parse the payload.
 	var payload GitHubWebhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		app.badRequest(w, r, errors.New("invalid JSON payload"))
 		return
 	}
 
-	// 3. Process only commits to the main branch.
+	// Process only commits to main or master branches.
 	if !strings.HasSuffix(payload.Ref, "/main") && !strings.HasSuffix(payload.Ref, "/master") {
-		response.JSON(w, http.StatusOK, nil, false, "Webhook received, but not for main branch. No action taken.")
+		response.JSON(w, http.StatusOK, nil, false, "Webhook received, but not for main/master branch. No action taken.")
 		return
 	}
 
-	// 4. Filter and store relevant commits.
 	var updatesAdded int
 	for _, commit := range payload.Commits {
-		// Convention: Only include commits with specific prefixes (e.g., feat, fix, update).
-		// This gives you control over which commits are user-facing.
+		// Only include commits with specific user-facing prefixes.
 		if strings.HasPrefix(commit.Message, "feat:") ||
 			strings.HasPrefix(commit.Message, "fix:") ||
 			strings.HasPrefix(commit.Message, "update:") {
@@ -93,17 +84,15 @@ func (app *application) handleGitHubWebhook(w http.ResponseWriter, r *http.Reque
 
 			update := &store.NewsletterUpdate{
 				CommitHash:  commit.ID,
-				Message:     strings.TrimSpace(strings.SplitN(commit.Message, "\n", 2)[0]), // Get first line of commit
+				Message:     strings.TrimSpace(strings.SplitN(commit.Message, "\n", 2)[0]),
 				Author:      commit.Author.Name,
 				CommittedAt: commitTimestamp,
 			}
 
-			// The store method should handle conflicts on the unique commit hash.
 			err := app.store.NewsletterUpdates.Create(r.Context(), update)
 			if err == nil {
 				updatesAdded++
 			} else {
-				// Log the error but continue processing other commits.
 				app.logger.Warn("Failed to save newsletter update for commit", "hash", commit.ID, "error", err)
 			}
 		}

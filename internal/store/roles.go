@@ -45,3 +45,14 @@ func (s *RoleStore) AddUserToRole(ctx context.Context, userID int64, roleName st
 	}
 	return nil
 }
+
+// GetUserRoles retrieves all role names for a specific user.
+func (s *RoleStore) GetUserRoles(ctx context.Context, userID int64) ([]string, error) {
+    var roleNames []string
+    query := `SELECT r.name FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = $1`
+    err := s.db.SelectContext(ctx, &roleNames, query, userID)
+    if err != nil {
+        return nil, err
+    }
+    return roleNames, nil
+}
