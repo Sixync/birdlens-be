@@ -46,6 +46,13 @@ type Storage struct {
 		AddMediaUrl(ctx context.Context, postId int64, mediaUrls string) error
 		GetTrendingPosts(ctx context.Context, duration time.Time, limit, offset int) (*PaginatedList[*Post], error)
 		GetFollowerPosts(ctx context.Context, userId int64, limit, offset int) (*PaginatedList[*Post], error)
+		// Logic: Add a new method to the interface to count user posts.
+		GetPostCountByUserID(ctx context.Context, userID int64) (int, error)
+	}
+	// Logic: Add the Notifications interface.
+	Notifications interface {
+		Create(ctx context.Context, notification *Notification) error
+		GetByUserID(ctx context.Context, userID int64, limit, offset int) (*PaginatedList[*Notification], error)
 	}
 	Followers interface {
 		Create(ctx context.Context, follower *Follower) error
@@ -134,6 +141,8 @@ func NewStore(db *sqlx.DB) *Storage {
 	return &Storage{
 		Users:         &UserStore{db},
 		Posts:         &PostStore{db},
+		// Logic: Add NotificationStore to the main store constructor.
+		Notifications: &NotificationStore{db},
 		Followers:     &FollowerStore{db},
 		Sessions:      &SessionStore{db},
 		Comments:      &CommentStore{db},

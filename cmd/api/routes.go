@@ -48,6 +48,8 @@ func (app *application) routes() http.Handler {
 	mux.Route("/users", func(r chi.Router) {
 		r.With(app.paginate).With(app.getUserMiddleware).Get("/{user_id}/followers", app.getUserFollowersHandler)
 		r.With(app.authMiddleware).With(app.getUserMiddleware).Get("/{user_id}/life-list", app.getUserLifeListHandler)
+		// Logic: Add the new notifications route. It is protected by authMiddleware.
+		r.With(app.authMiddleware).With(app.paginate).Get("/me/notifications", app.getNotificationsHandler)
 		r.Post("/", app.createUserHandler)
 		r.With(app.authMiddleware).Get("/me", app.getCurrentUserProfileHandler)
 	})

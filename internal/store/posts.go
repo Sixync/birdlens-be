@@ -51,6 +51,18 @@ func NewPostStore(db *sqlx.DB) *PostStore {
 	return &PostStore{db: db}
 }
 
+// Logic: Add a method to count a user's posts.
+// This is necessary to determine if a post is the user's first, which triggers the referral reward.
+func (s *PostStore) GetPostCountByUserID(ctx context.Context, userID int64) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM posts WHERE user_id = $1`
+	err := s.db.GetContext(ctx, &count, query, userID)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 // Create inserts a new post into the database
 func (s *PostStore) Create(ctx context.Context, post *Post) error {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)

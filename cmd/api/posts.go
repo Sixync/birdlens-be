@@ -196,8 +196,10 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 
 	log.Println("post created successfully with id", post.Id)
     
+	// Logic: After creating the post, we check if this action should trigger a referral reward.
+	// This is done in a background task to not slow down the API response to the user.
 	app.backgroundTask(r, func() error {
-		return app.checkAndCompleteReferral(context.Background(), currentUser.Id)
+		return app.checkAndCompleteReferral(context.Background(), currentUser)
 	})
 
 	var uploadedFiles []uploadedFile
@@ -286,14 +288,27 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 	response.JSON(w, http.StatusCreated, post, false, "post created successfully")
 }
 
-func (app *application) checkAndCompleteReferral(ctx context.Context, refereeID int64) error {
-	pendingReferral, err := app.store.Referrals.GetPendingByRefereeID(ctx, refereeID)
+// Logic: This function now checks the post count and creates a notification.
+func (app *application) checkAndCompleteReferral(ctx context.Context, referee *store.User) error {
+    postCount, err := app.store.Posts.GetPostCountByUserID(ctx, referee.Id)
+    if err != nil {
+        log.Printf("Could not get post count for user %d: %v", referee.Id, err)
+        return err // Return error to be logged by backgroundTask
+    }
+
+    // The referral reward is only given for the *very first* post.
+    if postCount != 1 {
+        log.Printf("Not the first post for user %d (post count: %d). No referral action taken.", referee.Id, postCount)
+        return nil
+    }
+
+	pendingReferral, err := app.store.Referrals.GetPendingByRefereeID(ctx, referee.Id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			log.Printf("No pending referral found for user ID %d. No action taken.", refereeID)
+			log.Printf("No pending referral found for user ID %d. No action taken.", referee.Id)
 			return nil
 		}
-		log.Printf("Error checking for pending referral for user ID %d: %v", refereeID, err)
+		log.Printf("Error checking for pending referral for user ID %d: %v", referee.Id, err)
 		return err
 	}
 
@@ -310,8 +325,21 @@ func (app *application) checkAndCompleteReferral(ctx context.Context, refereeID 
 		log.Printf("CRITICAL: Failed to grant subscription reward to referrer user ID %d. Error: %v", pendingReferral.ReferrerID, err)
 		return err
 	}
-
 	log.Printf("Successfully granted ExBird subscription to referrer ID %d.", pendingReferral.ReferrerID)
+
+    // Create a notification for the referrer
+    notification := &store.Notification{
+        UserID:  pendingReferral.ReferrerID,
+        Type:    "referral_success",
+        Message: fmt.Sprintf("Congratulations! You have been awarded 1 month of ExBird for referring user %s.", referee.Username),
+    }
+    err = app.store.Notifications.Create(ctx, notification)
+    if err != nil {
+        log.Printf("CRITICAL: Failed to create notification for referrer ID %d. Error: %v", pendingReferral.ReferrerID, err)
+        // We continue even if notification fails, as the subscription grant is more critical.
+    } else {
+        log.Printf("Successfully created referral reward notification for user %d.", pendingReferral.ReferrerID)
+    }
 
 	err = app.store.Referrals.Complete(ctx, pendingReferral.ID)
 	if err != nil {
