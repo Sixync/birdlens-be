@@ -1,9 +1,9 @@
-// birdlens-be/cmd/api/posts.go
 package main
 
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -20,21 +20,17 @@ import (
 
 var PostKey key = "post"
 
-// Logic: The PostResponse struct is updated to include location data.
-// This is essential for the Sighting card on the client, which needs to display
-// the location name where the bird was sighted.
 type PostResponse struct {
-	ID              int64     `json:"id"`
-	PosterAvatarUrl *string   `json:"poster_avatar_url"`
-	PosterName      string    `json:"poster_name"`
-	CreatedAt       time.Time `json:"created_at"`
-	ImagesUrls      []string  `json:"images_urls"`
-	Content         string    `json:"content"`
-	LikesCount      int       `json:"likes_count"`
-	CommentsCount   int       `json:"comments_count"`
-	SharesCount     int       `json:"shares_count"`
-	IsLiked         bool      `json:"is_liked"`
-	// Sighting-specific fields
+	ID                int64      `json:"id"`
+	PosterAvatarUrl   *string    `json:"poster_avatar_url"`
+	PosterName        string     `json:"poster_name"`
+	CreatedAt         time.Time  `json:"created_at"`
+	ImagesUrls        []string   `json:"images_urls"`
+	Content           string     `json:"content"`
+	LikesCount        int        `json:"likes_count"`
+	CommentsCount     int        `json:"comments_count"`
+	SharesCount       int        `json:"shares_count"`
+	IsLiked           bool       `json:"is_liked"`
 	Type              string     `json:"type"`
 	SightingDate      *time.Time `json:"sighting_date,omitempty"`
 	TaggedSpeciesCode *string    `json:"tagged_species_code,omitempty"`
@@ -74,9 +70,6 @@ func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) 
 		var postResponse PostResponse
 
 		postResponse.ID = post.Id
-		// This query for the poster was failing with "sql: no rows in result set"
-		// because the user_id on the post was 0. The fix in createPostHandler
-		// ensures post.UserId is now a valid, existing user ID.
 		poster, err := app.store.Users.GetById(ctx, post.UserId)
 		if err != nil {
 			app.serverError(w, r, err)
@@ -87,8 +80,6 @@ func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) 
 		postResponse.PosterName = poster.Username
 		postResponse.CreatedAt = post.CreatedAt
 		postResponse.Content = post.Content
-		// Logic: Populate the newly added fields for the PostResponse.
-		// This makes the sighting's location data available to the client.
 		postResponse.Type = post.Type
 		postResponse.SightingDate = post.SightingDate
 		postResponse.TaggedSpeciesCode = post.TaggedSpeciesCode
@@ -137,6 +128,7 @@ func (app *application) getPostsHandler(w http.ResponseWriter, r *http.Request) 
 	response.JSON(w, http.StatusOK, res, false, "get successful")
 }
 
+
 func (app *application) addUserReactionHandler(w http.ResponseWriter, r *http.Request) {
 	currentUser := app.getUserFromFirebaseClaimsCtx(r)
 	if currentUser == nil {
@@ -165,6 +157,7 @@ func (app *application) addUserReactionHandler(w http.ResponseWriter, r *http.Re
 	response.JSON(w, http.StatusCreated, nil, false, "reaction added successfully")
 }
 
+
 type CreatePostRequest struct {
 	Content string `json:"content"`
 }
@@ -178,13 +171,11 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Parse multipart form
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
 		return
 	}
 
-	// Populate post fields
 	post.Content = r.FormValue("content")
 	post.LocationName = r.FormValue("location_name")
 	post.Latitude, _ = strconv.ParseFloat(r.FormValue("latitude"), 64)
@@ -192,14 +183,10 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 	post.PrivacyLevel = r.FormValue("privacy_level")
 	post.Type = r.FormValue("type")
 	post.IsFeatured = r.FormValue("is_featured") == "true"
-
-	// Associate the post with the currently authenticated user.
-	// This was the missing step causing the user_id to be 0.
 	post.UserId = currentUser.Id
 
 	log.Println("post is", post)
 
-	// Create post in database
 	ctx := r.Context()
 	if err := app.store.Posts.Create(ctx, &post); err != nil {
 		log.Println("error creating post:", err)
@@ -208,8 +195,11 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	log.Println("post created successfully with id", post.Id)
+    
+	app.backgroundTask(r, func() error {
+		return app.checkAndCompleteReferral(context.Background(), currentUser.Id)
+	})
 
-	// Process uploaded files
 	var uploadedFiles []uploadedFile
 	for _, fheaders := range r.MultipartForm.File {
 		for _, headers := range fheaders {
@@ -223,7 +213,6 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 			}
 			defer file.Close()
 
-			// Read file once into a buffer
 			contentBuf := bytes.NewBuffer(nil)
 			if _, err := io.Copy(contentBuf, file); err != nil {
 				log.Println("error reading file content:", err)
@@ -232,7 +221,6 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 			}
 			fileContent := contentBuf.Bytes()
 
-			// Detect content type from the first 512 bytes
 			contentType := http.DetectContentType(fileContent[:512])
 			if contentType != "image/jpeg" && contentType != "image/png" && contentType != "video/mp4" {
 				app.badRequest(w, r, fmt.Errorf("unsupported file type: %s", contentType))
@@ -241,7 +229,6 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 			uploadedFile.ContentType = contentType
 			log.Println("detected content type", uploadedFile.ContentType)
 
-			// Get file size from the buffer
 			uploadedFile.Size = int64(len(fileContent))
 			log.Println("file size", uploadedFile.Size)
 
@@ -253,7 +240,6 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// Upload files to Cloudinary concurrently
 	type uploadResult struct {
 		url string
 		err error
@@ -272,13 +258,11 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 		}(file)
 	}
 
-	// Close results channel after all goroutines complete
 	go func() {
 		wg.Wait()
 		close(results)
 	}()
 
-	// Collect results and handle errors
 	var urls []string
 	for result := range results {
 		if result.err != nil {
@@ -289,7 +273,6 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 		urls = append(urls, result.url)
 	}
 
-	// Add media URLs to the post in the database
 	for _, url := range urls {
 		if err := app.store.Posts.AddMediaUrl(ctx, post.Id, url); err != nil {
 			log.Println("error adding media url to post:", err)
@@ -301,6 +284,43 @@ func (app *application) createPostHandler(w http.ResponseWriter, r *http.Request
 	log.Println("uploaded media urls", urls)
 
 	response.JSON(w, http.StatusCreated, post, false, "post created successfully")
+}
+
+func (app *application) checkAndCompleteReferral(ctx context.Context, refereeID int64) error {
+	pendingReferral, err := app.store.Referrals.GetPendingByRefereeID(ctx, refereeID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("No pending referral found for user ID %d. No action taken.", refereeID)
+			return nil
+		}
+		log.Printf("Error checking for pending referral for user ID %d: %v", refereeID, err)
+		return err
+	}
+
+	log.Printf("Pending referral found! ID: %d. Referrer: %d. Completing...", pendingReferral.ID, pendingReferral.ReferrerID)
+
+	exBirdPlan, err := app.store.Users.GetSubscriptionByName(ctx, "ExBird")
+	if err != nil {
+		log.Printf("CRITICAL: Could not find 'ExBird' subscription plan to grant referral reward. Error: %v", err)
+		return err
+	}
+
+	err = app.store.Users.GrantSubscriptionForOrder(ctx, pendingReferral.ReferrerID, exBirdPlan.ID)
+	if err != nil {
+		log.Printf("CRITICAL: Failed to grant subscription reward to referrer user ID %d. Error: %v", pendingReferral.ReferrerID, err)
+		return err
+	}
+
+	log.Printf("Successfully granted ExBird subscription to referrer ID %d.", pendingReferral.ReferrerID)
+
+	err = app.store.Referrals.Complete(ctx, pendingReferral.ID)
+	if err != nil {
+		log.Printf("CRITICAL: Failed to mark referral ID %d as completed. Error: %v", pendingReferral.ID, err)
+		return err
+	}
+
+	log.Printf("Referral ID %d successfully marked as completed.", pendingReferral.ID)
+	return nil
 }
 
 func (app *application) getPostMiddleware(next http.Handler) http.Handler {

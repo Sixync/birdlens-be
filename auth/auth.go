@@ -31,13 +31,11 @@ func NewAuthService(s *store.Storage, c *auth.Client) *AuthService {
 	}
 }
 
-// Logic: Simplified RegisterUserReq to only require email and password from the client.
-// Other fields like username are now tagged with `json:"-"` to be ignored during JSON decoding,
-// as they will be auto-generated on the backend.
 type RegisterUserReq struct {
 	Username     string  `json:"-"`
 	Password     string  `json:"password" validate:"required,min=3"`
 	Email        string  `json:"email" validate:"required,email"`
+	ReferralCode *string `json:"referral_code,omitempty"`
 	FirstName    string  `json:"-"`
 	LastName     string  `json:"-"`
 	Age          int     `json:"-"`
@@ -104,11 +102,6 @@ func (s *AuthService) Login(ctx context.Context,
 }
 
 func (s *AuthService) Register(ctx context.Context, req RegisterUserReq) (string, int64, error) {
-	// Logic: Auto-generate user details for a simplified registration process.
-	// 1. A base username is derived from the local part of the user's email.
-	// 2. The username is sanitized to ensure it contains only valid characters.
-	// 3. A loop attempts to create a unique username by appending a random suffix if the base username is already taken.
-	// 4. Default values are set for FirstName, LastName, and Age.
 	emailParts := strings.Split(req.Email, "@")
 	baseUsername := emailParts[0]
 
@@ -124,7 +117,7 @@ func (s *AuthService) Register(ctx context.Context, req RegisterUserReq) (string
 	}
 
 	var finalUsername string
-	for i := 0; i < 5; i++ { // Try up to 5 times to find a unique username
+	for i := 0; i < 5; i++ {
 		tempUsername := baseUsername
 		if i > 0 {
 			randomSuffix := uuid.New().String()[:4]
@@ -175,6 +168,31 @@ func (s *AuthService) Register(ctx context.Context, req RegisterUserReq) (string
 	if err != nil {
 		log.Printf("failed to create user in database: %v", err)
 		return "", 0, errors.New("failed to register user")
+	}
+    
+	if req.ReferralCode != nil && *req.ReferralCode != "" {
+		log.Printf("Processing referral code '%s' for new user %d", *req.ReferralCode, user.Id)
+		referrer, err := s.store.Users.GetByUsername(ctx, *req.ReferralCode)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				log.Printf("Referral code '%s' is not a valid user. Ignoring.", *req.ReferralCode)
+			} else {
+				log.Printf("Error checking referrer user: %v. Ignoring referral.", err)
+			}
+		} else {
+			newReferral := &store.Referral{
+				ReferrerID:       referrer.Id,
+				RefereeID:        user.Id,
+				Status:           store.ReferralStatusPending,
+				ReferralCodeUsed: *req.ReferralCode,
+			}
+			err = s.store.Referrals.Create(ctx, newReferral)
+			if err != nil {
+				log.Printf("Failed to create referral record for new user %d referred by %d: %v", user.Id, referrer.Id, err)
+			} else {
+				log.Printf("Successfully created pending referral record ID %d", newReferral.ID)
+			}
+		}
 	}
 
 	customToken, err := s.FireAuth.CustomToken(ctx, *user.FirebaseUID)
